@@ -244,10 +244,15 @@ function weakestKeys() {
         .map(([key]) => key.toLowerCase());
 }
 
+// Custom Text with no text saved uses common words, and is recorded as them.
+function passageCategory() {
+    return gameState.category === 'custom' && !gameState.customText ? 'common' : gameState.category;
+}
+
 // Runs only compete with runs of the same mode, length, and category.
 function settingsKey() {
     const length = gameState.mode === 'time' ? `${gameState.duration}s` : `${gameState.wordCount}w`;
-    let category = gameState.category;
+    let category = passageCategory();
     if (category === 'custom') category = `custom-${textHash(gameState.customText)}`;
     if (category === 'code') category = `code-${gameState.codeLanguage}`;
     if (category === 'common') {
@@ -461,7 +466,7 @@ function getPassage() {
         while (words.length < gameState.wordCount) words.push(...custom.split(' '));
         return { text: words.slice(0, gameState.wordCount).join(' '), source: '' };
     }
-    if (gameState.category === 'common' || gameState.category === 'custom') {
+    if (passageCategory() === 'common') {
         const count = gameState.mode === 'words' ? gameState.wordCount : COMMON_CHUNK;
         return { text: commonWords(count), source: '' };
     }
@@ -981,7 +986,7 @@ function showResultModal(wpm, accuracy, { isNewBest, previousBest }) {
         : 'No missed keys.';
     practiceBtn.classList.toggle('hidden', weakestKeys().length === 0);
     // A custom text stays on this device, so it cannot be sent as a challenge.
-    const canChallenge = elapsed >= 1000 && gameState.category !== 'custom';
+    const canChallenge = elapsed >= 1000 && passageCategory() !== 'custom';
     challengeBtn.classList.toggle('hidden', !canChallenge);
     challengeBtn.textContent = 'Copy challenge link';
     challengeLinkRow.classList.add('hidden');
@@ -1154,6 +1159,7 @@ function challengePayload() {
     }
     const settings = {};
     for (const name of CHALLENGE_SETTINGS) settings[name] = gameState[name];
+    settings.category = passageCategory();
     return {
         v: CHALLENGE_VERSION,
         s: settings,

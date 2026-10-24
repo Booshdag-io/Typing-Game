@@ -1615,6 +1615,23 @@ test.describe('custom text', () => {
         await expect(page.locator('#challenge-btn')).toBeHidden();
     });
 
+    test('with no text saved, runs are recorded as Common Words', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem(
+                'typingGameSettings',
+                JSON.stringify({ mode: 'words', category: 'custom', customText: '' })
+            );
+        });
+        await page.goto('/');
+        await input(page).pressSequentially(await currentQuote(page), { delay: 40 });
+        await expect(page.locator('#result-modal')).toHaveClass(/show/);
+        const keys = await page.evaluate(() =>
+            Object.keys(JSON.parse(localStorage.getItem('typingGameBests')))
+        );
+        expect(keys).toEqual(['words:10w:common']);
+        await expect(page.locator('#challenge-btn')).toBeVisible();
+    });
+
     test('the typing input still blocks paste', async ({ page }) => {
         await page.addInitScript(() => {
             localStorage.setItem(
