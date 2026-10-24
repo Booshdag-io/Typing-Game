@@ -36,6 +36,26 @@ test.describe('loading', () => {
         expect(errors).toEqual([]);
     });
 
+    test('makes no requests to other origins and uses the bundled fonts', async ({ page }) => {
+        const external = [];
+        page.on('request', (request) => {
+            if (!request.url().startsWith('http://127.0.0.1:8765/')) external.push(request.url());
+        });
+        const errors = collectErrors(page);
+        await page.goto('/');
+        await page.evaluate(() => document.fonts.ready);
+
+        const loaded = await page.evaluate(() =>
+            [...document.fonts]
+                .filter((face) => face.status === 'loaded')
+                .map((face) => face.family.replace(/"/g, ''))
+                .sort()
+        );
+        expect(loaded).toEqual(['JetBrains Mono', 'Space Grotesk']);
+        expect(external.filter((url) => !url.startsWith('data:'))).toEqual([]);
+        expect(errors).toEqual([]);
+    });
+
     test('ignores corrupt localStorage instead of crashing', async ({ page }) => {
         await page.addInitScript(() => {
             localStorage.setItem('typingGameSettings', '{not json');

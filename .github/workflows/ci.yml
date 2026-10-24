@@ -60,6 +60,7 @@ jobs:
         run: |
           mkdir _site
           cp index.html script.js style.css _site/
+          cp -r fonts _site/
 
       - uses: actions/upload-pages-artifact@v3
         with:

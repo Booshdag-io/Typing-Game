@@ -6,7 +6,7 @@ Live: https://tmhsdigital.github.io/Typing-Game/
 
 ## Run it
 
-Open `index.html` in a browser, or serve the folder with any static file server. The only network request is for two Google Fonts; without them the page falls back to system fonts.
+Open `index.html` in a browser, or serve the folder with any static file server. The page makes no requests to other sites. The two fonts, JetBrains Mono and Space Grotesk, are served from `fonts/` under the SIL Open Font License, and a Content-Security-Policy limits scripts, styles, and fonts to the site itself.
 
 ## What it does
 
@@ -55,7 +55,7 @@ npm run check         # lint, format check, and tests
 
 `index.html`, `script.js`, and `style.css` are the whole app. The script runs at load and expects to be the last tag in `<body>`. Tests live in `tests/` and drive the real page with keystrokes; they cover time and words mode, WPM and accuracy math, the dialogs' keyboard handling, reduced motion, paste blocking, clipboard sharing, Ghost Mode replay, and recovery from corrupt `localStorage`.
 
-Each push to `main` runs lint, the format check, and the tests in GitHub Actions. If they pass, the same workflow publishes `index.html`, `script.js`, and `style.css` to GitHub Pages; if they fail, the live site is not changed.
+Each push to `main` runs lint, the format check, and the tests in GitHub Actions. If they pass, the same workflow publishes `index.html`, `script.js`, `style.css`, and `fonts/` to GitHub Pages; if they fail, the live site is not changed.
 
 ## License
 
