@@ -1,7 +1,7 @@
 // End-to-end tests against the real page. page.evaluate callbacks run in the
 // browser, where script.js's top-level consts are in scope.
 /* global runtime, gameState, resultModal, typingInputElement, wpmElement, updateMetrics,
-   getPassage, settingsKey, COMMON_WORDS, QUOTES */
+   getPassage, settingsKey, COMMON_WORDS, QUOTES, renderNewQuote */
 
 const { test, expect } = require('@playwright/test');
 const { default: AxeBuilder } = require('@axe-core/playwright');
@@ -787,12 +787,17 @@ test.describe('text', () => {
     test('the result dialog shows where the passage is from', async ({ page }) => {
         await page.addInitScript(() => {
             localStorage.setItem('typingGameSettings', JSON.stringify({ category: 'general' }));
-            // Always pick the last quote, which has a source.
-            Math.random = () => 0.9999;
         });
         await page.clock.install();
         await page.goto('/');
-        const source = await page.evaluate(() => runtime.quoteSource);
+        // Pick the last quote, or the one before it if the last was just
+        // shown. Both have a source.
+        const source = await page.evaluate(() => {
+            const values = [0.9999, 0.97];
+            runtime.random = () => values.shift() ?? 0.5;
+            renderNewQuote();
+            return runtime.quoteSource;
+        });
         expect(source).not.toBe('');
 
         await input(page).press((await currentQuote(page))[0]);
@@ -1174,5 +1179,83 @@ test.describe('stats dialog', () => {
         );
         expect(stored).toEqual([null, null, null]);
         await expect(page.locator('#high-score')).toHaveText('0');
+    });
+});
+
+test.describe('ghost on the same passage', () => {
+    test('a new best records its seed, and the next ghost run uses the same passage', async ({
+        page,
+    }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem(
+                'typingGameSettings',
+                JSON.stringify({ mode: 'words', isGhostEnabled: true })
+            );
+        });
+        await page.goto('/');
+        await expect(page.locator('#ghost-status')).toHaveText(
+            'No ghost yet for these settings: finish a run to record one.'
+        );
+        const first = await currentQuote(page);
+        await input(page).pressSequentially(first, { delay: 40 });
+        await expect(page.locator('#result-modal')).toHaveClass(/show/);
+        const seed = await page.evaluate(() => runtime.seed);
+        const stored = await page.evaluate(() =>
+            JSON.parse(localStorage.getItem('typingGameBests'))
+        );
+        expect(stored['words:10w:common'].seed).toBe(seed);
+
+        await page.locator('#play-again-btn').click();
+        expect(await currentQuote(page)).toBe(first);
+        await expect(page.locator('#ghost-status')).toHaveText(/^Racing your best: \d+ WPM$/);
+
+        // With Ghost Mode off, passages are new again.
+        await page.evaluate(() => {
+            gameState.isGhostEnabled = false;
+        });
+        await page.keyboard.press('Tab');
+        expect(await currentQuote(page)).not.toBe(first);
+        await expect(page.locator('#ghost-status')).toBeHidden();
+    });
+
+    test('time mode replays the same sequence of passages', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem(
+                'typingGameBests',
+                JSON.stringify({ 'time:60s:common': { wpm: 40, keystrokes: [], seed: 12345 } })
+            );
+            localStorage.setItem('typingGameSettings', JSON.stringify({ isGhostEnabled: true }));
+        });
+        await page.goto('/');
+        const passages = async () => {
+            const one = await currentQuote(page);
+            await input(page).pressSequentially(one);
+            const two = await currentQuote(page);
+            await page.keyboard.press('Tab');
+            return [one, two];
+        };
+        const firstRun = await passages();
+        expect(firstRun[0]).not.toBe(firstRun[1]);
+        expect(await passages()).toEqual(firstRun);
+    });
+
+    test('shows how far ahead of or behind the ghost you are', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem(
+                'typingGameBests',
+                JSON.stringify({
+                    'time:60s:common': { wpm: 40, keystrokes: [{ t: 0, i: 6 }], seed: 7 },
+                })
+            );
+            localStorage.setItem('typingGameSettings', JSON.stringify({ isGhostEnabled: true }));
+        });
+        await page.goto('/');
+        const quote = await currentQuote(page);
+        await input(page).press(quote[0]);
+        await expect(page.locator('#ghost-status')).toHaveText('-5 chars vs ghost');
+        await input(page).pressSequentially(quote.slice(1, 6));
+        await expect(page.locator('#ghost-status')).toHaveText('Level with the ghost');
+        await input(page).pressSequentially(quote.slice(6, 9));
+        await expect(page.locator('#ghost-status')).toHaveText('+3 chars vs ghost');
     });
 });

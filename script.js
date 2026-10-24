@@ -64,6 +64,7 @@ const punctuationToggle = document.getElementById('punctuation-toggle');
 const numbersToggle = document.getElementById('numbers-toggle');
 const stopOnErrorToggle = document.getElementById('stop-on-error-toggle');
 const capsWarning = document.getElementById('caps-warning');
+const ghostStatus = document.getElementById('ghost-status');
 
 // Chart
 const chartContainer = document.getElementById('progress-chart-container');
@@ -158,6 +159,10 @@ const runtime = {
     mistakes: 0, // inserted characters that did not match
     ghostStrokes: [], // {t: ms since start, i: character index} for Ghost Mode
     keyStats: {}, // {[expected character]: {attempts, misses}} for this run
+    seed: 0, // passages for the run are drawn from this seed
+    random: Math.random, // seeded generator, replaced in resetGame
+    weakKeys: [], // letters the Weak Keys category uses this run
+    ghostIndex: 0, // character index the ghost has reached
     ghostTimeouts: [],
 };
 
@@ -277,6 +282,24 @@ function playSound(type) {
     }
 }
 
+// --- Random ---
+// Small seeded generator (mulberry32), so the passages of a run can be
+// rebuilt from its seed for Ghost Mode and challenge links.
+function seededRandom(seed) {
+    let state = seed >>> 0;
+    return () => {
+        state = (state + 0x6d2b79f5) >>> 0;
+        let t = state;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+function newSeed() {
+    return Math.floor(Math.random() * 4294967296);
+}
+
 // --- Text Selection ---
 // Words per passage when Common Words runs in time mode. A new passage is
 // loaded each time one is finished.
@@ -286,7 +309,7 @@ let lastQuoteIndex = -1;
 function pickQuote(categoryQuotes) {
     let index;
     do {
-        index = Math.floor(Math.random() * categoryQuotes.length);
+        index = Math.floor(runtime.random() * categoryQuotes.length);
     } while (categoryQuotes.length > 1 && index === lastQuoteIndex);
     lastQuoteIndex = index;
     return categoryQuotes[index];
@@ -301,17 +324,17 @@ function commonWords(count, list = COMMON_WORDS) {
     for (let n = 0; n < count; n++) {
         let word;
         do {
-            word = list[Math.floor(Math.random() * list.length)];
+            word = list[Math.floor(runtime.random() * list.length)];
         } while (word === previous);
         previous = word;
 
-        if (gameState.hasNumbers && Math.random() < 0.1) {
-            word = String(1 + Math.floor(Math.random() * 9999));
+        if (gameState.hasNumbers && runtime.random() < 0.1) {
+            word = String(1 + Math.floor(runtime.random() * 9999));
         }
         if (gameState.hasPunctuation) {
             if (sentenceStart) word = word[0].toUpperCase() + word.slice(1);
             sentenceStart = false;
-            const roll = Math.random();
+            const roll = runtime.random();
             if (n === count - 1 || roll < 0.1) {
                 word += roll < 0.02 ? '?' : '.';
                 sentenceStart = true;
@@ -335,7 +358,7 @@ function wordsWithKeys(keys) {
 function getPassage() {
     if (gameState.category === 'weak') {
         const count = gameState.mode === 'words' ? gameState.wordCount : COMMON_CHUNK;
-        return { text: commonWords(count, wordsWithKeys(weakestKeys())), source: '' };
+        return { text: commonWords(count, wordsWithKeys(runtime.weakKeys)), source: '' };
     }
     if (gameState.category === 'common') {
         const count = gameState.mode === 'words' ? gameState.wordCount : COMMON_CHUNK;
@@ -463,6 +486,8 @@ function handleInput() {
     });
     if (typed.length < spans.length) spans[typed.length].classList.add('current');
 
+    updateGhostStatus();
+
     runtime.correctChars = runtime.baseCorrect + correctCount;
     runtime.typedChars = runtime.baseTyped + typed.length;
     updateMetrics();
@@ -497,6 +522,7 @@ function startGame() {
 
     const best = currentBest();
     if (gameState.isGhostEnabled && best) startGhostPlayback(best);
+    updateGhostStatus();
 }
 
 function tick() {
@@ -522,6 +548,8 @@ function startGhostPlayback(best) {
             if (!runtime.isStarted) return;
             // Look everything up live: the quote (and its spans) may have
             // been replaced since playback started.
+            runtime.ghostIndex = stroke.i;
+            updateGhostStatus();
             const cursor = document.getElementById('ghost-cursor');
             const spans = quoteDisplayElement.querySelectorAll('span');
             const targetSpan = spans[stroke.i - runtime.quoteBase];
@@ -532,6 +560,28 @@ function startGhostPlayback(best) {
             cursor.style.opacity = 1;
         }, stroke.t)
     );
+}
+
+// Before a run: what the ghost is. During a run: how far ahead or behind
+// the ghost you are, in characters.
+function updateGhostStatus() {
+    if (!gameState.isGhostEnabled) {
+        ghostStatus.classList.add('hidden');
+        return;
+    }
+    ghostStatus.classList.remove('hidden');
+    const best = currentBest();
+    if (!best) {
+        ghostStatus.textContent = 'No ghost yet for these settings: finish a run to record one.';
+        return;
+    }
+    if (!runtime.isStarted) {
+        ghostStatus.textContent = `Racing your best: ${best.wpm} WPM`;
+        return;
+    }
+    const delta = runtime.quoteBase + typingInputElement.value.length - runtime.ghostIndex;
+    if (delta === 0) ghostStatus.textContent = 'Level with the ghost';
+    else ghostStatus.textContent = `${delta > 0 ? '+' : ''}${delta} chars vs ghost`;
 }
 
 function stopGhostPlayback() {
@@ -587,7 +637,8 @@ function endGame(endTime = Date.now()) {
         saveJSON(STORAGE_KEYS.keyStats, keyStats);
 
         if (wpm > (previousBest ? previousBest.wpm : 0)) {
-            bests[key] = { wpm, keystrokes: runtime.ghostStrokes };
+            bests[key] = { wpm, keystrokes: runtime.ghostStrokes, seed: runtime.seed };
+            if (gameState.category === 'weak') bests[key].weakKeys = runtime.weakKeys;
             saveJSON(STORAGE_KEYS.bests, bests);
             isNewBest = true;
         }
@@ -682,7 +733,17 @@ function resetGame() {
         mistakes: 0,
         ghostStrokes: [],
         keyStats: {},
+        ghostIndex: 0,
     });
+
+    // With Ghost Mode on and a best that recorded its seed, replay the same
+    // passages the best was typed on. Otherwise start from a new seed.
+    const best = currentBest();
+    const replay = gameState.isGhostEnabled && best && Number.isInteger(best.seed) ? best : null;
+    runtime.seed = replay ? replay.seed : newSeed();
+    runtime.random = seededRandom(runtime.seed);
+    runtime.weakKeys = replay && Array.isArray(replay.weakKeys) ? replay.weakKeys : weakestKeys();
+    lastQuoteIndex = -1;
 
     runtime.timer = gameState.mode === 'time' ? gameState.duration : 0;
     timerElement.textContent = runtime.timer;
@@ -699,6 +760,7 @@ function resetGame() {
     updateQuickBar();
     updateHighScoreDisplay();
     renderNewQuote();
+    updateGhostStatus();
     typingInputElement.focus();
 }
 
@@ -711,7 +773,7 @@ function updateQuickBar() {
     quickWordCount.classList.toggle('hidden', gameState.mode !== 'words');
     ghostBadge.classList.toggle('hidden', !gameState.isGhostEnabled);
 
-    const weak = weakestKeys();
+    const weak = runtime.weakKeys;
     practiceNote.classList.toggle('hidden', gameState.category !== 'weak');
     practiceNote.textContent = weak.length
         ? `Practicing: ${weak.join(', ')}`
@@ -996,7 +1058,11 @@ function validBests(map) {
     for (const [key, best] of Object.entries(map)) {
         if (!best || !isNumber(best.wpm) || !Array.isArray(best.keystrokes)) continue;
         const keystrokes = best.keystrokes.filter((s) => s && isNumber(s.t) && isNumber(s.i));
-        result[key] = { ...best, wpm: best.wpm, keystrokes };
+        result[key] = { wpm: best.wpm, keystrokes };
+        if (Number.isInteger(best.seed)) result[key].seed = best.seed;
+        if (Array.isArray(best.weakKeys)) {
+            result[key].weakKeys = best.weakKeys.filter((k) => /^[a-z]$/.test(k)).slice(0, 3);
+        }
     }
     return result;
 }
