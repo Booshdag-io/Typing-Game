@@ -43,6 +43,7 @@
     /* Functional */
     --color-success: #34d399;
     --color-error: #f87171;
+    --color-warning: #fbbf24;
 
     /* Effects */
     --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
@@ -437,6 +438,18 @@ input:checked + .toggle-custom::after {
     cursor: default;
     z-index: 10; /* Above display to capture clicks */
     resize: none;
+}
+
+.caps-warning {
+    position: absolute;
+    top: -2rem;
+    right: 0;
+    padding: 0.2rem 0.6rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--bg-dark);
+    background: var(--color-warning);
+    border-radius: var(--radius-sm);
 }
 
 /* Shown over the passage when the input does not have focus */

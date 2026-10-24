@@ -40,6 +40,8 @@ const hardModeToggle = document.getElementById('hard-mode-toggle-settings');
 const ghostModeToggle = document.getElementById('ghost-mode-toggle');
 const punctuationToggle = document.getElementById('punctuation-toggle');
 const numbersToggle = document.getElementById('numbers-toggle');
+const stopOnErrorToggle = document.getElementById('stop-on-error-toggle');
+const capsWarning = document.getElementById('caps-warning');
 
 // Chart
 const chartContainer = document.querySelector('.chart-container');
@@ -84,6 +86,7 @@ const DEFAULT_SETTINGS = {
     isSoundEnabled: true,
     hasPunctuation: false, // common words only
     hasNumbers: false, // common words only
+    isStopOnError: false, // wrong keys do not advance the caret
 };
 
 const CATEGORIES = ['common', ...Object.keys(QUOTES)];
@@ -101,6 +104,7 @@ function sanitizeSettings(saved) {
         'isSoundEnabled',
         'hasPunctuation',
         'hasNumbers',
+        'isStopOnError',
     ]) {
         if (typeof saved[flag] === 'boolean') settings[flag] = saved[flag];
     }
@@ -334,14 +338,9 @@ function handleInput() {
         return;
     }
 
-    const typed = typingInputElement.value;
+    let typed = typingInputElement.value;
     const quote = runtime.quoteText;
     const spans = quoteDisplayElement.querySelectorAll('span');
-
-    runtime.ghostStrokes.push({
-        t: Date.now() - runtime.startTime,
-        i: runtime.quoteBase + typed.length,
-    });
 
     // Count keystrokes and mistakes for the characters past the part of the
     // value that did not change. Diffing against the previous value, instead
@@ -357,14 +356,17 @@ function handleInput() {
         unchanged++;
     }
     const inserted = typed.slice(unchanged);
-    runtime.previousValue = typed;
     if (inserted.length > 0) {
         let wrong = 0;
+        let firstWrong = -1;
         for (let k = 0; k < inserted.length; k++) {
             const pos = unchanged + k;
             if (pos >= quote.length) continue;
             runtime.keystrokes++;
-            if (inserted[k] !== quote[pos]) wrong++;
+            if (inserted[k] !== quote[pos]) {
+                wrong++;
+                if (firstWrong === -1) firstWrong = pos;
+            }
         }
         if (wrong > 0) {
             runtime.mistakes += wrong;
@@ -373,7 +375,19 @@ function handleInput() {
         } else {
             playSound('click');
         }
+        // Stop on error: the mistake is counted, but the caret stays put
+        // until the right key is pressed.
+        if (gameState.isStopOnError && firstWrong !== -1) {
+            typed = typed.slice(0, firstWrong);
+            typingInputElement.value = typed;
+        }
     }
+    runtime.previousValue = typed;
+
+    runtime.ghostStrokes.push({
+        t: Date.now() - runtime.startTime,
+        i: runtime.quoteBase + typed.length,
+    });
 
     let correctCount = 0;
     spans.forEach((span, index) => {
@@ -672,6 +686,7 @@ function applySettingsToUI() {
     ghostModeToggle.checked = gameState.isGhostEnabled;
     punctuationToggle.checked = gameState.hasPunctuation;
     numbersToggle.checked = gameState.hasNumbers;
+    stopOnErrorToggle.checked = gameState.isStopOnError;
     quoteDisplayElement.classList.toggle('blurred', gameState.isHardMode);
 }
 
@@ -725,8 +740,15 @@ const CARET_KEYS = [
 ];
 
 function handleInputKeydown(e) {
+    updateCapsWarning(e);
     const selectAll = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a';
     if (CARET_KEYS.includes(e.key) || selectAll) e.preventDefault();
+}
+
+// With Caps Lock on, every letter is wrong. Warn before the run is wasted.
+function updateCapsWarning(e) {
+    if (typeof e.getModifierState !== 'function') return;
+    capsWarning.classList.toggle('hidden', !e.getModifierState('CapsLock'));
 }
 
 function pinCaretToEnd() {
@@ -820,6 +842,7 @@ function init() {
 
     typingInputElement.addEventListener('input', handleInput);
     typingInputElement.addEventListener('keydown', handleInputKeydown);
+    typingInputElement.addEventListener('keyup', updateCapsWarning);
     typingInputElement.addEventListener('mousedown', handleInputMousedown);
     typingInputElement.addEventListener('select', pinCaretToEnd);
     typingInputElement.addEventListener('focus', pinCaretToEnd);
@@ -856,6 +879,9 @@ function init() {
     });
     numbersToggle.addEventListener('change', (e) => {
         gameState.hasNumbers = e.target.checked;
+    });
+    stopOnErrorToggle.addEventListener('change', (e) => {
+        gameState.isStopOnError = e.target.checked;
     });
 
     shareBtn.addEventListener('click', shareResult);

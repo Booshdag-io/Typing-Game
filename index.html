@@ -102,6 +102,9 @@
                 </div>
 
                 <div class="typing-container">
+                    <p id="caps-warning" class="caps-warning hidden" role="status">
+                        Caps Lock is on
+                    </p>
                     <div id="quote-display" class="quote-display" aria-hidden="true"></div>
                     <p id="quote-text" class="visually-hidden"></p>
                     <div id="focus-hint" class="focus-hint" aria-hidden="true">
@@ -273,6 +276,11 @@
                                 <input type="checkbox" id="numbers-toggle" />
                                 <span class="toggle-custom"></span>
                                 Numbers (Common Words)
+                            </label>
+                            <label class="toggle-label">
+                                <input type="checkbox" id="stop-on-error-toggle" />
+                                <span class="toggle-custom"></span>
+                                Stop on error (fix each mistake before moving on)
                             </label>
                         </div>
                     </div>

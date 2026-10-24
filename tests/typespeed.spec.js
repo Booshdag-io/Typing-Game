@@ -797,3 +797,41 @@ test.describe('text', () => {
         await expect(page.locator('#modal-source')).toBeHidden();
     });
 });
+
+test.describe('practice options', () => {
+    test('stop on error counts the mistake and keeps the caret in place', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('typingGameSettings', JSON.stringify({ isStopOnError: true }));
+        });
+        await page.goto('/');
+        await expect(page.locator('#stop-on-error-toggle')).toBeChecked();
+        const quote = await currentQuote(page);
+        const wrongKey = quote[2] === 'x' ? 'y' : 'x';
+
+        await input(page).pressSequentially(quote.slice(0, 2));
+        await input(page).press(wrongKey);
+        await expect(input(page)).toHaveValue(quote.slice(0, 2));
+        await expect(page.locator('#mistakes')).toHaveText('1');
+        await expect(page.locator('#quote-display span').nth(2)).toHaveClass('current');
+
+        await input(page).press(quote[2]);
+        await expect(input(page)).toHaveValue(quote.slice(0, 3));
+        await expect(page.locator('#quote-display .incorrect')).toHaveCount(0);
+    });
+
+    test('warns while Caps Lock is on', async ({ page }) => {
+        await page.goto('/');
+        await expect(page.locator('#caps-warning')).toBeHidden();
+
+        const press = (capsLock) =>
+            page.evaluate((caps) => {
+                typingInputElement.dispatchEvent(
+                    new KeyboardEvent('keydown', { key: 'A', modifierCapsLock: caps })
+                );
+            }, capsLock);
+        await press(true);
+        await expect(page.locator('#caps-warning')).toBeVisible();
+        await press(false);
+        await expect(page.locator('#caps-warning')).toBeHidden();
+    });
+});
