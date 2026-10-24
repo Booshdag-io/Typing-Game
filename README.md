@@ -15,7 +15,7 @@ Open `index.html` in a browser, or serve the folder with any static file server.
 - **Categories**: General and Technology quotes, or Code Snippets (a mix of JavaScript, CSS, SQL, and shell lines).
 - **Stats**: WPM, accuracy, mistakes, and your best WPM for the current settings, updated as you type.
   - WPM is correct characters divided by five, per minute of real elapsed time.
-  - Accuracy is the share of typed characters that matched, counting mistakes you later fixed.
+  - Accuracy is the share of typed characters that matched, counting mistakes you later fixed. It is rounded down, so 100% means no mistakes.
 - **Hard Mode**: blurs the text you are typing.
 - **Ghost Mode**: records the timing of your best run and replays its position as a second cursor while you type.
 - **Results**: a modal with your WPM and accuracy, a line chart of your last ten runs at the current settings once you have two or more, and a button that copies a one-line summary to the clipboard.
@@ -23,7 +23,7 @@ Open `index.html` in a browser, or serve the folder with any static file server.
 - **Keyboard**: Tab restarts while you are typing. Escape closes a dialog. Opening Settings during a run abandons the run.
 - **Reduced motion**: with the OS reduce-motion setting on, the background pulse, caret blink, and fades are turned off.
 
-Pasting into the input is blocked.
+Pasting into the input is blocked, and the caret stays at the end: arrow keys, Home, End, select-all, and clicks do not move it.
 
 ## Settings and data
 

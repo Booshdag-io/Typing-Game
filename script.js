@@ -149,6 +149,7 @@ const runtime = {
     baseTyped: 0, // typed characters in completed quotes
     correctChars: 0, // correct characters across the whole run
     typedChars: 0, // typed characters across the whole run
+    previousValue: '', // input value after the last input event
     keystrokes: 0, // characters inserted, including ones later deleted
     mistakes: 0, // inserted characters that did not match
     ghostStrokes: [], // {t: ms since start, i: character index} for Ghost Mode
@@ -296,12 +297,20 @@ function renderNewQuote() {
 
     typingInputElement.value = '';
     typingInputElement.maxLength = runtime.quoteText.length;
+    runtime.previousValue = '';
 }
 
 // --- Core Logic ---
-function handleInput(e) {
+function handleInput() {
     if (settingsModal.classList.contains('show')) return;
     if (!runtime.isStarted) startGame();
+
+    // The interval checks the clock only every 250 ms. Input that arrives
+    // after the deadline ends the run instead of counting toward it.
+    if (gameState.mode === 'time' && elapsedMs() >= gameState.duration * 1000) {
+        endGame(runtime.startTime + gameState.duration * 1000);
+        return;
+    }
 
     const typed = typingInputElement.value;
     const quote = runtime.quoteText;
@@ -312,14 +321,26 @@ function handleInput(e) {
         i: runtime.quoteBase + typed.length,
     });
 
-    // Count keystrokes and mistakes for the characters just inserted.
-    if (e.inputType && e.inputType.startsWith('insert') && e.data) {
-        const inserted = e.data;
-        const start = typed.length - inserted.length;
+    // Count keystrokes and mistakes for the characters past the part of the
+    // value that did not change. Diffing against the previous value, instead
+    // of trusting e.data, also handles on-screen keyboards that resend the
+    // whole word being composed or replace it after autocorrect.
+    const previous = runtime.previousValue;
+    let unchanged = 0;
+    while (
+        unchanged < previous.length &&
+        unchanged < typed.length &&
+        previous[unchanged] === typed[unchanged]
+    ) {
+        unchanged++;
+    }
+    const inserted = typed.slice(unchanged);
+    runtime.previousValue = typed;
+    if (inserted.length > 0) {
         let wrong = 0;
         for (let k = 0; k < inserted.length; k++) {
-            const pos = start + k;
-            if (pos < 0 || pos >= quote.length) continue;
+            const pos = unchanged + k;
+            if (pos >= quote.length) continue;
             runtime.keystrokes++;
             if (inserted[k] !== quote[pos]) wrong++;
         }
@@ -408,11 +429,9 @@ function startGhostPlayback(best) {
             const spans = quoteDisplayElement.querySelectorAll('span');
             const targetSpan = spans[stroke.i - runtime.quoteBase];
             if (!cursor || !targetSpan) return;
-            const rect = targetSpan.getBoundingClientRect();
-            const parentRect = quoteDisplayElement.getBoundingClientRect();
-            const x = rect.left - parentRect.left;
-            const y = rect.top - parentRect.top;
-            cursor.style.transform = `translate(${x}px, ${y}px)`;
+            // offsetLeft/Top are layout coordinates inside .quote-display,
+            // so the focus-mode scale does not shift them.
+            cursor.style.transform = `translate(${targetSpan.offsetLeft}px, ${targetSpan.offsetTop}px)`;
             cursor.style.opacity = 1;
         }, stroke.t)
     );
@@ -428,7 +447,7 @@ function updateMetrics() {
     const wpm = elapsed >= 1000 ? Math.round(runtime.correctChars / 5 / (elapsed / 60000)) : 0;
     const accuracy =
         runtime.keystrokes > 0
-            ? Math.round(((runtime.keystrokes - runtime.mistakes) / runtime.keystrokes) * 100)
+            ? Math.floor(((runtime.keystrokes - runtime.mistakes) / runtime.keystrokes) * 100)
             : 100;
     wpmElement.textContent = wpm;
     accuracyElement.textContent = accuracy;
@@ -624,6 +643,36 @@ function handlePillClick(e, group) {
 }
 
 // --- Keyboard ---
+// Keys that would move the caret or select text inside the input. Typing
+// always happens at the end of the value.
+const CARET_KEYS = [
+    'ArrowLeft',
+    'ArrowRight',
+    'ArrowUp',
+    'ArrowDown',
+    'Home',
+    'End',
+    'PageUp',
+    'PageDown',
+];
+
+function handleInputKeydown(e) {
+    const selectAll = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a';
+    if (CARET_KEYS.includes(e.key) || selectAll) e.preventDefault();
+}
+
+function pinCaretToEnd() {
+    const end = typingInputElement.value.length;
+    typingInputElement.setSelectionRange(end, end);
+}
+
+// A click would place the caret where it lands. Focus without moving it.
+function handleInputMousedown(e) {
+    e.preventDefault();
+    typingInputElement.focus();
+    pinCaretToEnd();
+}
+
 function isModalOpen(modal) {
     return modal.classList.contains('show');
 }
@@ -678,6 +727,10 @@ function init() {
     updateHighScoreDisplay();
 
     typingInputElement.addEventListener('input', handleInput);
+    typingInputElement.addEventListener('keydown', handleInputKeydown);
+    typingInputElement.addEventListener('mousedown', handleInputMousedown);
+    typingInputElement.addEventListener('select', pinCaretToEnd);
+    typingInputElement.addEventListener('focus', pinCaretToEnd);
     typingInputElement.addEventListener('paste', (e) => e.preventDefault());
     typingInputElement.addEventListener('drop', (e) => e.preventDefault());
     resetButton.addEventListener('click', resetGame);

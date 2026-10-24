@@ -1,6 +1,6 @@
 // End-to-end tests against the real page. page.evaluate callbacks run in the
 // browser, where script.js's top-level consts are in scope.
-/* global runtime, gameState, resultModal, typingInputElement, wpmElement */
+/* global runtime, gameState, resultModal, typingInputElement, wpmElement, updateMetrics */
 
 const { test, expect } = require('@playwright/test');
 
@@ -362,4 +362,125 @@ test('restarting during a ghost replay cancels the pending moves', async ({ page
     await page.waitForTimeout(800);
     await expect(page.locator('#ghost-cursor')).toHaveCSS('opacity', '0');
     expect(errors).toEqual([]);
+});
+
+test.describe('input', () => {
+    test('arrow keys, select-all, and clicks cannot move the caret off the end', async ({
+        page,
+    }) => {
+        await page.goto('/');
+        const quote = await currentQuote(page);
+
+        await input(page).pressSequentially(quote.slice(0, 3));
+        await input(page).press('ArrowLeft');
+        await input(page).press('ArrowLeft');
+        await input(page).press('Home');
+        await input(page).press(quote[3]);
+        await input(page).press('ControlOrMeta+a');
+        await input(page).press(quote[4]);
+        await input(page).click({ position: { x: 5, y: 5 } });
+        await input(page).press(quote[5]);
+
+        const state = await page.evaluate(() => ({
+            value: typingInputElement.value,
+            mistakes: runtime.mistakes,
+            incorrect: document.querySelectorAll('#quote-display .incorrect').length,
+        }));
+        expect(state).toEqual({ value: quote.slice(0, 6), mistakes: 0, incorrect: 0 });
+    });
+
+    test('counts composed text from on-screen keyboards once per character', async ({ page }) => {
+        await page.goto('/');
+        const quote = await currentQuote(page);
+        const word = quote.slice(0, 5);
+
+        // Android keyboards resend the whole word being composed on every key.
+        await page.evaluate((text) => {
+            for (let n = 1; n <= text.length; n++) {
+                typingInputElement.value = text.slice(0, n);
+                typingInputElement.dispatchEvent(
+                    new InputEvent('input', {
+                        inputType: 'insertCompositionText',
+                        data: text.slice(0, n),
+                    })
+                );
+            }
+        }, word);
+        expect(await page.evaluate(() => [runtime.keystrokes, runtime.mistakes])).toEqual([5, 0]);
+
+        // Autocorrect replaces text with inputType insertReplacementText and no data.
+        const wrong = quote[5] === 'x' ? 'y' : 'x';
+        await page.evaluate(
+            ([before, after]) => {
+                typingInputElement.value = before;
+                typingInputElement.dispatchEvent(
+                    new InputEvent('input', { inputType: 'insertText', data: before.slice(-1) })
+                );
+                typingInputElement.value = after;
+                typingInputElement.dispatchEvent(
+                    new InputEvent('input', { inputType: 'insertReplacementText', data: null })
+                );
+            },
+            [word + wrong, quote.slice(0, 6)]
+        );
+        expect(await page.evaluate(() => [runtime.keystrokes, runtime.mistakes])).toEqual([7, 1]);
+    });
+
+    test('time mode ignores characters typed after the clock reaches zero', async ({ page }) => {
+        await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+        await page.goto('/');
+        // Paused, so the 250 ms interval only fires when the test says so.
+        await page.clock.pauseAt(new Date('2026-01-01T00:00:10Z'));
+        const quote = await currentQuote(page);
+        await input(page).pressSequentially(quote.slice(0, 5));
+        await page.clock.runFor(59_900);
+
+        // Move past the deadline without letting the 250 ms interval fire.
+        const start = await page.evaluate(() => runtime.startTime);
+        await page.clock.setSystemTime(start + 60_200);
+        await input(page).press(quote[5]);
+
+        expect(await page.evaluate(() => [runtime.correctChars, runtime.isStarted])).toEqual([
+            5,
+            false,
+        ]);
+        await expect(page.locator('#result-modal')).toHaveClass(/show/);
+        expect(await page.evaluate(() => runtime.endTime - runtime.startTime)).toBe(60_000);
+    });
+
+    test('accuracy is below 100 whenever there is a mistake', async ({ page }) => {
+        await page.goto('/');
+        await page.evaluate(() => {
+            runtime.keystrokes = 250;
+            runtime.mistakes = 1;
+        });
+        await page.evaluate(() => updateMetrics());
+        await expect(page.locator('#accuracy')).toHaveText('99');
+    });
+});
+
+test('ghost cursor lines up with its character while focus mode scales the text', async ({
+    page,
+}) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.addInitScript(() => {
+        localStorage.setItem(
+            'typingGameBests',
+            JSON.stringify({
+                'time:60s:general': { wpm: 40, keystrokes: [{ t: 0, i: 30 }] },
+            })
+        );
+        localStorage.setItem('typingGameSettings', JSON.stringify({ isGhostEnabled: true }));
+    });
+    await page.goto('/');
+    const quote = await currentQuote(page);
+    await input(page).press(quote[0]);
+    await expect(page.locator('#ghost-cursor')).toHaveCSS('opacity', '1');
+
+    const offset = await page.evaluate(() => {
+        const span = document.querySelectorAll('#quote-display span')[30];
+        const cursor = document.getElementById('ghost-cursor');
+        return Math.abs(cursor.getBoundingClientRect().left - span.getBoundingClientRect().left);
+    });
+    expect(offset).toBeLessThan(1);
 });
