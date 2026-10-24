@@ -74,6 +74,8 @@ npm run check         # lint, format check, and tests
 
 Each push to `main` runs lint, the format check, and the tests in GitHub Actions. If they pass, the same workflow publishes those files and `fonts/` to GitHub Pages; if they fail, the live site is not changed.
 
+Conventions for code, tests, docs, and commits are in `CONTRIBUTING.md`.
+
 ## License
 
 Apache 2.0. See `LICENSE`.
