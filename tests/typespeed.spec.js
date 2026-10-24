@@ -1663,3 +1663,23 @@ test('the manifest names the app and its icons', async ({ request }) => {
     }
     expect(manifest.icons.map((icon) => icon.sizes)).toEqual(['192x192', '512x512']);
 });
+
+test('link previews have a title, description, and an image that exists', async ({
+    page,
+    request,
+}) => {
+    await page.goto('/');
+    const meta = await page.evaluate(() =>
+        Object.fromEntries(
+            [...document.querySelectorAll('meta[property^="og:"], meta[name^="twitter:"]')].map(
+                (tag) => [tag.getAttribute('property') || tag.getAttribute('name'), tag.content]
+            )
+        )
+    );
+    expect(meta['og:title']).toBe('TypeSpeed');
+    expect(meta['og:description'].length).toBeGreaterThan(20);
+    expect(meta['twitter:card']).toBe('summary_large_image');
+    expect(meta['og:image']).toBe('https://tmhsdigital.github.io/Typing-Game/preview.png');
+    // The deployed URL maps to the file in the repo root.
+    expect((await request.get('/preview.png')).ok()).toBe(true);
+});

@@ -4,6 +4,10 @@ A typing trainer that runs in the browser. Plain HTML, CSS, and JavaScript, no f
 
 Live: https://tmhsdigital.github.io/Typing-Game/
 
+![A run in progress: stats bar, mode and length controls, and the passage with typed words in white](docs/screenshot-run.png)
+
+![The result dialog: WPM, accuracy, raw WPM, characters, time, missed keys, and charts for this run and recent runs](docs/screenshot-result.png)
+
 ## Run it
 
 Open `index.html` in a browser, or serve the folder with any static file server. The page makes no requests to other sites. The two fonts, JetBrains Mono and Space Grotesk, are served from `fonts/` under the SIL Open Font License, and a Content-Security-Policy limits scripts, styles, and fonts to the site itself.
