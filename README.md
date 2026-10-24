@@ -41,15 +41,19 @@ The best score and ghost run are shared across modes and categories, so a 10-wor
 
 ```
 npm install
-npm run lint          # ESLint on script.js
-npm run format:check  # Prettier on the top-level files
+npx playwright install chromium   # once, for the tests
+
+npm run serve         # static server on http://127.0.0.1:8765, no caching
+npm test              # Playwright end-to-end tests in headless Chromium
+npm run lint          # ESLint
+npm run format:check  # Prettier
 npm run format        # Prettier, write mode
-npm run check         # both
+npm run check         # lint, format check, and tests
 ```
 
-`index.html`, `script.js`, and `style.css` are the whole app. The script runs at load and expects to be the last tag in `<body>`.
+`index.html`, `script.js`, and `style.css` are the whole app. The script runs at load and expects to be the last tag in `<body>`. Tests live in `tests/` and drive the real page with keystrokes; they cover time and words mode, WPM and accuracy math, the dialogs' keyboard handling, paste blocking, clipboard sharing, Ghost Mode replay, and recovery from corrupt `localStorage`.
 
-Deployed with GitHub Pages from the `main` branch. There are no tests.
+Deployed with GitHub Pages from the `main` branch.
 
 ## License
 
