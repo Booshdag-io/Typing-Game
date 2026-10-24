@@ -1288,6 +1288,7 @@ function applySettingsToUI() {
     codeLanguageSelect.value = gameState.codeLanguage;
     customTextInput.value = gameState.customText;
     quoteDisplayElement.classList.toggle('blurred', gameState.isHardMode);
+    applyTheme();
 }
 
 // Settings changes reset the game on close anyway, so a run in progress is
@@ -1660,7 +1661,6 @@ function handleKeydown(e) {
 
 // --- Init ---
 function init() {
-    applyTheme();
     applySettingsToUI();
     updateHighScoreDisplay();
 

@@ -1246,6 +1246,24 @@ test.describe('stats dialog', () => {
         await fresh.close();
     });
 
+    test('importing a different theme applies it without a reload', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('typingGameSettings', JSON.stringify({ theme: 'dark' }));
+        });
+        await page.goto('/');
+        await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+        await page.locator('#stats-btn').click();
+        await page
+            .locator('#import-input')
+            .setInputFiles(
+                jsonFile(
+                    'theme.json',
+                    JSON.stringify({ app: 'TypeSpeed', typingGameSettings: { theme: 'contrast' } })
+                )
+            );
+        await expect(page.locator('html')).toHaveAttribute('data-theme', 'contrast');
+    });
+
     test('import rejects files that are not TypeSpeed exports', async ({ page }) => {
         await page.addInitScript(seed);
         await page.goto('/');
