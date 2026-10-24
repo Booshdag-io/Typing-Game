@@ -472,6 +472,15 @@ input:checked + .toggle-custom::after {
     filter: blur(4px);
 }
 
+/* Each word is painted on its own, so a keystroke repaints one word rather
+   than the whole passage (see renderNewQuote). max-width keeps a grouped
+   word inside the line on very narrow screens. */
+.word {
+    display: inline-block;
+    position: relative;
+    max-width: 100%;
+}
+
 /* The return arrow that marks a new line in code */
 .newline {
     color: var(--text-muted);

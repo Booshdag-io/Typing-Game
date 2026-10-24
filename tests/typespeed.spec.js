@@ -3,7 +3,7 @@
 /* global runtime, gameState, resultModal, typingInputElement, wpmElement, updateMetrics,
    getPassage, settingsKey, COMMON_WORDS, QUOTES, renderNewQuote, parseChallenge,
    decodeChallenge, encodeChallenge, normalizeCustomText, CODE_SNIPPETS, playSound, playVoice,
-   getAudioContext, audio, SOUNDS, timerElement, tick */
+   getAudioContext, audio, SOUNDS, timerElement, tick, quoteDisplayElement */
 
 const { test, expect } = require('@playwright/test');
 const { default: AxeBuilder } = require('@axe-core/playwright');
@@ -186,6 +186,76 @@ test.describe('time mode', () => {
                 runtime.isStarted,
             ])
         ).toEqual([...before, true]);
+    });
+});
+
+test.describe('rendering', () => {
+    test('a keystroke restyles only the characters around the caret', async ({ page }) => {
+        const text = 'alpha beta gamma delta '.repeat(80).trim();
+        await page.addInitScript((value) => {
+            localStorage.setItem(
+                'typingGameSettings',
+                JSON.stringify({ category: 'custom', customText: value })
+            );
+        }, text);
+        await page.goto('/');
+        await input(page).pressSequentially('alpha bet');
+        await page.evaluate(() => {
+            window.restyled = new Set();
+            new MutationObserver((records) =>
+                records.forEach((record) => window.restyled.add(record.target))
+            ).observe(quoteDisplayElement, {
+                attributes: true,
+                attributeFilter: ['class'],
+                subtree: true,
+            });
+        });
+        await input(page).press('x');
+        await input(page).press('Backspace');
+        // The character typed, the one after it, and back again.
+        expect(await page.evaluate(() => window.restyled.size)).toBe(2);
+        await expect(page.locator('#quote-display span').nth(9)).toHaveClass('current');
+        await expect(page.locator('#quote-display span').nth(8)).toHaveClass('correct');
+    });
+
+    test('a word longer than a phone line still breaks mid-word', async ({ page }) => {
+        const long = 'supercalifragilisticexpialidocious-and-more';
+        await page.setViewportSize({ width: 390, height: 800 });
+        await page.addInitScript((value) => {
+            localStorage.setItem(
+                'typingGameSettings',
+                JSON.stringify({ category: 'custom', customText: value })
+            );
+        }, `the ${long} end`);
+        await page.goto('/');
+        const rows = await page.evaluate((index) => {
+            const top = (n) =>
+                quoteDisplayElement.querySelectorAll('span')[n].getBoundingClientRect().top;
+            return { start: top(4), last: top(index), end: top(index + 2) };
+        }, 3 + long.length);
+        // The word wraps across lines like plain text, and "end" follows it on
+        // its last line instead of being pushed below a full-width block.
+        expect(rows.last).toBeGreaterThan(rows.start);
+        expect(Math.abs(rows.end - rows.last)).toBeLessThan(2);
+    });
+
+    test('groups the passage by word, with new lines outside the words', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem(
+                'typingGameSettings',
+                JSON.stringify({ category: 'code', codeLanguage: 'python' })
+            );
+        });
+        await page.goto('/');
+        const quote = await currentQuote(page);
+        const groups = await page.evaluate(() =>
+            [...quoteDisplayElement.children]
+                .filter((el) => el.id !== 'ghost-cursor')
+                .map((el) => (el.className === 'newline' ? '\n' : el.textContent))
+        );
+        expect(groups.join('')).toBe(quote);
+        expect(groups.every((g) => g === '\n' || !g.includes('\n'))).toBe(true);
+        expect(groups.every((g) => g === '\n' || !/ \S/.test(g))).toBe(true);
     });
 });
 
@@ -624,8 +694,8 @@ test.describe('ghost cursor on a different passage in Time mode', () => {
                 ahead: cursor.classList.contains('ahead'),
                 behind: cursor.classList.contains('behind'),
                 left: new DOMMatrix(cursor.style.transform).m41,
-                start: spans[0].offsetLeft,
-                end: last.offsetLeft + last.offsetWidth,
+                start: spans[0].offsetLeft + spans[0].offsetParent.offsetLeft,
+                end: last.offsetLeft + last.offsetParent.offsetLeft + last.offsetWidth,
             };
         });
 

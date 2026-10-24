@@ -392,6 +392,9 @@ function newSeed() {
 // Words per passage when Common Words runs in time mode. A new passage is
 // loaded each time one is finished.
 const COMMON_CHUNK = 25;
+// Longest word, with its trailing space, that renderNewQuote groups into a
+// .word. A phone screen fits about 20 characters per line.
+const WORD_GROUP_MAX = 16;
 let lastQuoteIndex = -1;
 
 function pickQuote(categoryQuotes) {
@@ -498,14 +501,40 @@ function renderNewQuote() {
         quoteDisplayElement.appendChild(ghostCursor);
     }
 
+    // One span per character, grouped by word: each word and the space after
+    // it go in a .word element, which the browser paints separately, so a
+    // keystroke repaints one word instead of the whole passage. A new line
+    // stays outside the words so it breaks the passage's line.
     const fragment = document.createDocumentFragment();
-    runtime.quoteText.split('').forEach((character) => {
+    let word = [];
+    const addWord = () => {
+        if (word.length === 0) return;
+        // A word that may not fit on a phone's line is left ungrouped, so it
+        // can still break mid-word like plain text.
+        let parent = fragment;
+        if (word.length <= WORD_GROUP_MAX) {
+            parent = document.createElement('div');
+            parent.className = 'word';
+            fragment.appendChild(parent);
+        }
+        word.forEach((span) => parent.appendChild(span));
+        word = [];
+    };
+    for (const character of runtime.quoteText) {
         const span = document.createElement('span');
-        // A new line shows as a return arrow, then breaks the line.
-        span.textContent = character === '\n' ? '\u21b5\n' : character;
-        if (character === '\n') span.className = 'newline';
-        fragment.appendChild(span);
-    });
+        if (character === '\n') {
+            addWord();
+            // Shown as a return arrow, then breaks the line.
+            span.textContent = '\u21b5\n';
+            span.className = 'newline';
+            fragment.appendChild(span);
+            continue;
+        }
+        span.textContent = character;
+        word.push(span);
+        if (character === ' ') addWord();
+    }
+    addWord();
     quoteDisplayElement.appendChild(fragment);
 
     const firstSpan = quoteDisplayElement.querySelector('span');
@@ -612,20 +641,23 @@ function handleInput() {
     // nor accuracy.
     let correctCount = 0;
     let filled = 0;
-    spans.forEach((span, index) => {
-        span.classList.remove('correct', 'incorrect', 'current');
-        if (index >= typed.length) return;
-        if (runtime.indent[index] && typed[index] === quote[index]) {
-            span.classList.add('correct');
-            filled++;
-        } else if (typed[index] === quote[index]) {
-            span.classList.add('correct');
-            correctCount++;
-        } else {
-            span.classList.add('incorrect');
-        }
-    });
-    if (typed.length < spans.length) spans[typed.length].classList.add('current');
+    for (let index = 0; index < typed.length; index++) {
+        if (typed[index] !== quote[index]) continue;
+        if (runtime.indent[index]) filled++;
+        else correctCount++;
+    }
+
+    // Only spans from the first changed character to the end of the longer
+    // of the old and new values can change state. Restyling just those keeps
+    // each keystroke from restyling the whole passage.
+    const last = Math.min(Math.max(previous.length, typed.length), spans.length - 1);
+    for (let index = Math.min(unchanged, typed.length); index <= last; index++) {
+        const span = spans[index];
+        const isTyped = index < typed.length;
+        span.classList.toggle('correct', isTyped && typed[index] === quote[index]);
+        span.classList.toggle('incorrect', isTyped && typed[index] !== quote[index]);
+        span.classList.toggle('current', index === typed.length);
+    }
 
     updateGhostStatus();
 
@@ -676,14 +708,14 @@ function tick() {
     const elapsedSeconds = Math.floor(elapsedMs() / 1000);
     if (gameState.mode === 'time') {
         runtime.timer = Math.max(0, gameState.duration - elapsedSeconds);
-        timerElement.textContent = runtime.timer;
+        setText(timerElement, runtime.timer);
         if (elapsedMs() >= gameState.duration * 1000) {
             endGame(runtime.startTime + gameState.duration * 1000);
             return;
         }
     } else {
         runtime.timer = elapsedSeconds;
-        timerElement.textContent = runtime.timer;
+        setText(timerElement, runtime.timer);
     }
     updateMetrics();
 }
@@ -713,10 +745,16 @@ function placeGhostCursor() {
     const ahead = index >= spans.length;
     const behind = index < 0;
     const span = spans[Math.min(Math.max(index, 0), spans.length - 1)];
-    // offsetLeft/Top are layout coordinates inside .quote-display, so the
-    // focus-mode scale does not shift them.
-    const left = span.offsetLeft + (ahead ? span.offsetWidth : 0);
-    cursor.style.transform = `translate(${left}px, ${span.offsetTop}px)`;
+    // offsetLeft/Top are layout coordinates, so the focus-mode scale does not
+    // shift them. A span inside a .word is measured from the word, so the
+    // word's offset is added.
+    let left = span.offsetLeft + (ahead ? span.offsetWidth : 0);
+    let top = span.offsetTop;
+    if (span.offsetParent !== quoteDisplayElement) {
+        left += span.offsetParent.offsetLeft;
+        top += span.offsetParent.offsetTop;
+    }
+    cursor.style.transform = `translate(${left}px, ${top}px)`;
     cursor.style.opacity = 1;
     cursor.classList.toggle('ahead', ahead);
     cursor.classList.toggle('behind', behind);
@@ -754,6 +792,14 @@ function stopGhostPlayback() {
     runtime.ghostTimeouts = [];
 }
 
+// Setting textContent replaces the text node and invalidates layout even
+// when the value is unchanged, so values written every keystroke or tick go
+// through here.
+function setText(element, value) {
+    const text = String(value);
+    if (element.textContent !== text) element.textContent = text;
+}
+
 function updateMetrics() {
     const elapsed = elapsedMs();
     const wpm = elapsed >= 1000 ? Math.round(runtime.correctChars / 5 / (elapsed / 60000)) : 0;
@@ -761,8 +807,8 @@ function updateMetrics() {
         runtime.keystrokes > 0
             ? Math.floor(((runtime.keystrokes - runtime.mistakes) / runtime.keystrokes) * 100)
             : 100;
-    wpmElement.textContent = wpm;
-    accuracyElement.textContent = accuracy;
+    setText(wpmElement, wpm);
+    setText(accuracyElement, accuracy);
     return { wpm, accuracy };
 }
 
