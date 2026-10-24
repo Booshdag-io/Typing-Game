@@ -113,6 +113,7 @@
                             <option value="general">Quotes</option>
                             <option value="technology">Technology</option>
                             <option value="code">Code Snippets</option>
+                            <option value="custom">Custom Text</option>
                         </select>
                         <p id="practice-note" class="practice-note hidden"></p>
                     </div>
@@ -379,6 +380,23 @@
                             Stop on error (fix each mistake before moving on)
                         </label>
                     </div>
+                </div>
+
+                <div class="setting-group">
+                    <label class="setting-label" for="custom-text">Custom text</label>
+                    <textarea
+                        id="custom-text"
+                        class="custom-text"
+                        rows="4"
+                        maxlength="4000"
+                        spellcheck="false"
+                        aria-describedby="custom-text-help"
+                    ></textarea>
+                    <p id="custom-text-help" class="setting-help">
+                        Used by the Custom Text category. Pasting works here. Curly quotes and
+                        dashes become plain ones, line breaks become spaces, and text past 2000
+                        characters is dropped.
+                    </p>
                 </div>
 
                 <div class="modal-actions">

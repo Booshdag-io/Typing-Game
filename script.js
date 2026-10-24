@@ -65,6 +65,7 @@ const ghostModeToggle = document.getElementById('ghost-mode-toggle');
 const punctuationToggle = document.getElementById('punctuation-toggle');
 const numbersToggle = document.getElementById('numbers-toggle');
 const stopOnErrorToggle = document.getElementById('stop-on-error-toggle');
+const customTextInput = document.getElementById('custom-text');
 const capsWarning = document.getElementById('caps-warning');
 const ghostStatus = document.getElementById('ghost-status');
 
@@ -116,9 +117,36 @@ const DEFAULT_SETTINGS = {
     hasPunctuation: false, // common words only
     hasNumbers: false, // common words only
     isStopOnError: false, // wrong keys do not advance the caret
+    customText: '', // passage for the Custom Text category, already normalized
 };
 
-const CATEGORIES = ['common', 'weak', ...Object.keys(QUOTES)];
+const CUSTOM_TEXT_LIMIT = 2000;
+
+// Typographic quotes, dashes, and ellipses become the keys people can type,
+// and all whitespace runs become single spaces.
+function normalizeCustomText(text) {
+    return String(text)
+        .replace(/[\u2018\u2019\u201a\u2032]/g, "'")
+        .replace(/[\u201c\u201d\u201e\u2033]/g, '"')
+        .replace(/[\u2013\u2014\u2212]/g, '-')
+        .replace(/\u2026/g, '...')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, CUSTOM_TEXT_LIMIT)
+        .trim();
+}
+
+// Short FNV-1a hash, so each custom text keeps its own best scores.
+function textHash(text) {
+    let hash = 0x811c9dc5;
+    for (let n = 0; n < text.length; n++) {
+        hash ^= text.charCodeAt(n);
+        hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+    return hash.toString(36);
+}
+
+const CATEGORIES = ['common', 'weak', 'custom', ...Object.keys(QUOTES)];
 
 function sanitizeSettings(saved) {
     const settings = { ...DEFAULT_SETTINGS };
@@ -127,6 +155,9 @@ function sanitizeSettings(saved) {
     if (DURATIONS.includes(saved.duration)) settings.duration = saved.duration;
     if (WORD_COUNTS.includes(saved.wordCount)) settings.wordCount = saved.wordCount;
     if (CATEGORIES.includes(saved.category)) settings.category = saved.category;
+    if (typeof saved.customText === 'string') {
+        settings.customText = normalizeCustomText(saved.customText);
+    }
     for (const flag of [
         'isGhostEnabled',
         'isHardMode',
@@ -201,6 +232,7 @@ function weakestKeys() {
 function settingsKey() {
     const length = gameState.mode === 'time' ? `${gameState.duration}s` : `${gameState.wordCount}w`;
     let category = gameState.category;
+    if (category === 'custom') category = `custom-${textHash(gameState.customText)}`;
     if (category === 'common') {
         if (gameState.hasPunctuation) category += '+punctuation';
         if (gameState.hasNumbers) category += '+numbers';
@@ -363,7 +395,15 @@ function getPassage() {
         const count = gameState.mode === 'words' ? gameState.wordCount : COMMON_CHUNK;
         return { text: commonWords(count, wordsWithKeys(runtime.weakKeys)), source: '' };
     }
-    if (gameState.category === 'common') {
+    const custom = gameState.customText;
+    if (gameState.category === 'custom' && custom) {
+        if (gameState.mode !== 'words') return { text: custom, source: '' };
+        // Words mode repeats the text from the start until there are enough words.
+        const words = [];
+        while (words.length < gameState.wordCount) words.push(...custom.split(' '));
+        return { text: words.slice(0, gameState.wordCount).join(' '), source: '' };
+    }
+    if (gameState.category === 'common' || gameState.category === 'custom') {
         const count = gameState.mode === 'words' ? gameState.wordCount : COMMON_CHUNK;
         return { text: commonWords(count), source: '' };
     }
@@ -790,10 +830,16 @@ function updateQuickBar() {
     ghostBadge.classList.toggle('hidden', !gameState.isGhostEnabled);
 
     const weak = runtime.weakKeys;
-    practiceNote.classList.toggle('hidden', gameState.category !== 'weak');
-    practiceNote.textContent = weak.length
-        ? `Practicing: ${weak.join(', ')}`
-        : 'Not enough mistakes recorded yet. Using all common words.';
+    const noCustomText = gameState.category === 'custom' && !gameState.customText;
+    practiceNote.classList.toggle('hidden', gameState.category !== 'weak' && !noCustomText);
+    if (noCustomText) {
+        practiceNote.textContent =
+            'No custom text yet. Add it in Settings; using common words until then.';
+    } else {
+        practiceNote.textContent = weak.length
+            ? `Practicing: ${weak.join(', ')}`
+            : 'Not enough mistakes recorded yet. Using all common words.';
+    }
 }
 
 function updateHighScoreDisplay() {
@@ -843,7 +889,8 @@ function showResultModal(wpm, accuracy, { isNewBest, previousBest }) {
         ? `Most missed keys: ${missed.join(', ')}`
         : 'No missed keys.';
     practiceBtn.classList.toggle('hidden', weakestKeys().length === 0);
-    challengeBtn.classList.toggle('hidden', elapsed < 1000);
+    // A custom text stays on this device, so it cannot be sent as a challenge.
+    challengeBtn.classList.toggle('hidden', elapsed < 1000 || gameState.category === 'custom');
     challengeBtn.textContent = 'Copy challenge link';
 
     const challenge = runtime.challenge;
@@ -991,6 +1038,7 @@ function parseChallenge(data) {
     }
 
     const sanitized = sanitizeSettings(data.s);
+    if (sanitized.category === 'custom') return null;
     const settings = {};
     for (const name of CHALLENGE_SETTINGS) settings[name] = sanitized[name];
     const weakKeys = Array.isArray(data.k)
@@ -1095,6 +1143,7 @@ function applySettingsToUI() {
     punctuationToggle.checked = gameState.hasPunctuation;
     numbersToggle.checked = gameState.hasNumbers;
     stopOnErrorToggle.checked = gameState.isStopOnError;
+    customTextInput.value = gameState.customText;
     quoteDisplayElement.classList.toggle('blurred', gameState.isHardMode);
 }
 
@@ -1112,6 +1161,8 @@ function openSettings() {
 // when the modal closes and the game resets.
 function closeSettings() {
     settingsModal.classList.remove('show');
+    gameState.customText = normalizeCustomText(customTextInput.value);
+    customTextInput.value = gameState.customText;
     saveSettings();
     resetGame();
 }
@@ -1151,7 +1202,8 @@ function handleQuickPillClick(e, group) {
 function describeKey(key) {
     const [mode, length, category = ''] = String(key).split(':');
     const [base, ...extras] = category.split('+');
-    const option = categorySelect.querySelector(`option[value="${CSS.escape(base)}"]`);
+    const value = base.startsWith('custom-') ? 'custom' : base;
+    const option = categorySelect.querySelector(`option[value="${CSS.escape(value)}"]`);
     const lengthLabel = mode === 'words' ? `${parseInt(length, 10)} words` : length;
     return [lengthLabel, option ? option.textContent : base, ...extras].join(', ');
 }
@@ -1381,7 +1433,7 @@ function openModal() {
 // Keep Tab and Shift+Tab inside the open dialog.
 function trapFocus(e, modal) {
     const focusable = Array.from(
-        modal.querySelectorAll('button, input, select, [tabindex]:not([tabindex="-1"])')
+        modal.querySelectorAll('button, input, select, textarea, [tabindex]:not([tabindex="-1"])')
     ).filter((el) => !el.disabled && el.offsetParent !== null);
     if (focusable.length === 0) return;
     const first = focusable[0];

@@ -2,7 +2,7 @@
 // browser, where script.js's top-level consts are in scope.
 /* global runtime, gameState, resultModal, typingInputElement, wpmElement, updateMetrics,
    getPassage, settingsKey, COMMON_WORDS, QUOTES, renderNewQuote, parseChallenge,
-   decodeChallenge, encodeChallenge */
+   decodeChallenge, encodeChallenge, normalizeCustomText */
 
 const { test, expect } = require('@playwright/test');
 const { default: AxeBuilder } = require('@axe-core/playwright');
@@ -1364,5 +1364,96 @@ test.describe('challenge links', () => {
         ]);
         expect(result.negativeTime).toBeNull();
         expect(result.badSeed).toBeNull();
+    });
+});
+
+test.describe('custom text', () => {
+    test('text pasted in Settings is normalized, typed, and kept after a reload', async ({
+        page,
+        context,
+        browserName,
+    }) => {
+        await page.goto('/');
+        await page.locator('#category-select').selectOption('custom');
+        await expect(page.locator('#practice-note')).toHaveText(
+            'No custom text yet. Add it in Settings; using common words until then.'
+        );
+
+        await page.locator('#settings-btn').click();
+        const raw = '\u201cIt\u2019s  fine\u201d \u2014 she said\u2026\n\nline two';
+        if (browserName === 'chromium') {
+            // A real paste works in this field, unlike in the typing input.
+            await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+            await page.evaluate((text) => navigator.clipboard.writeText(text), raw);
+            await page.locator('#custom-text').focus();
+            await page.keyboard.press('ControlOrMeta+v');
+        } else {
+            await page.locator('#custom-text').fill(raw);
+        }
+        await expect(page.locator('#custom-text')).toHaveValue(raw);
+        await page.keyboard.press('Escape');
+
+        const expected = '"It\'s fine" - she said... line two';
+        expect(await currentQuote(page)).toBe(expected);
+        await expect(page.locator('#practice-note')).toBeHidden();
+        expect(await page.evaluate(() => settingsKey())).toMatch(/^time:60s:custom-[0-9a-z]+$/);
+
+        await page.reload();
+        expect(await currentQuote(page)).toBe(expected);
+        await page.locator('#settings-btn').click();
+        await expect(page.locator('#custom-text')).toHaveValue(expected);
+    });
+
+    test('words mode repeats short text, and long text is capped', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem(
+                'typingGameSettings',
+                JSON.stringify({ mode: 'words', category: 'custom', customText: 'one two three' })
+            );
+        });
+        await page.goto('/');
+        expect(await currentQuote(page)).toBe('one two three one two three one two three one');
+        const capped = await page.evaluate(() => normalizeCustomText('word '.repeat(1000)));
+        expect(capped.length).toBeLessThanOrEqual(2000);
+        expect(capped.endsWith(' ')).toBe(false);
+    });
+
+    test('different texts keep separate bests, and challenge links are not offered', async ({
+        page,
+    }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem(
+                'typingGameSettings',
+                JSON.stringify({ mode: 'words', category: 'custom', customText: 'alpha beta' })
+            );
+        });
+        await page.goto('/');
+        const first = await page.evaluate(() => settingsKey());
+        await page.evaluate(() => {
+            gameState.customText = 'gamma delta';
+        });
+        expect(await page.evaluate(() => settingsKey())).not.toBe(first);
+        await page.evaluate(() => {
+            gameState.customText = 'alpha beta';
+        });
+
+        await input(page).pressSequentially(await currentQuote(page), { delay: 40 });
+        await expect(page.locator('#result-modal')).toHaveClass(/show/);
+        await expect(page.locator('#challenge-btn')).toBeHidden();
+    });
+
+    test('the typing input still blocks paste', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem(
+                'typingGameSettings',
+                JSON.stringify({ category: 'custom', customText: 'paste me' })
+            );
+        });
+        await page.goto('/');
+        const blocked = await page.evaluate(() => {
+            const paste = new ClipboardEvent('paste', { bubbles: true, cancelable: true });
+            return !typingInputElement.dispatchEvent(paste);
+        });
+        expect(blocked).toBe(true);
     });
 });

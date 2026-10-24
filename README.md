@@ -19,6 +19,7 @@ Open `index.html` in a browser, or serve the folder with any static file server.
   - Quotes: 50 passages, most of them opening lines of public-domain books.
   - Technology: 50 quotes about programming and computing.
   - Code Snippets: a mix of JavaScript, CSS, SQL, and shell lines.
+  - Custom Text: text you paste into Settings. Curly quotes and dashes are converted to plain ones, line breaks become spaces, and text past 2000 characters is dropped. Words mode repeats the text from the start when it has fewer words than the word count. Each custom text has its own best score, keyed by a hash of the text. Custom Text runs cannot be sent as challenge links.
 
   When the source of a passage is known, the result dialog shows it. Passages are in `texts.js`.
 

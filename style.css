@@ -758,6 +758,29 @@ footer {
     color: var(--text-muted);
 }
 
+.custom-text {
+    width: 100%;
+    resize: vertical;
+    padding: 0.6rem 0.75rem;
+    font-family: var(--font-code);
+    font-size: 0.85rem;
+    color: var(--text-main);
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+}
+
+.custom-text:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+}
+
+.setting-help {
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
 /* Settings Modal Specifics */
 .settings-content {
     text-align: left;
