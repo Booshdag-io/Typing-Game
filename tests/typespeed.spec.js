@@ -169,6 +169,27 @@ test.describe('settings dialog', () => {
         await expect(input(page)).toBeFocused();
     });
 
+    test('opening it during a run abandons the run', async ({ page }) => {
+        await page.clock.install();
+        await page.goto('/');
+        const quote = await currentQuote(page);
+        await input(page).pressSequentially(quote.slice(0, 5));
+
+        // Focus mode blocks clicks on the header, but the keyboard still reaches it.
+        await page.keyboard.press('Shift+Tab');
+        await page.keyboard.press('Shift+Tab');
+        await expect(page.locator('#settings-btn')).toBeFocused();
+        await page.keyboard.press('Enter');
+        await expect(page.locator('#settings-modal')).toHaveClass(/show/);
+        await page.clock.runFor(61_000);
+
+        await expect(page.locator('#result-modal')).not.toHaveClass(/show/);
+        expect(await page.evaluate(() => runtime.isStarted)).toBe(false);
+        await expect(page.locator('#timer')).toHaveText('60');
+        await expect(page.locator('#wpm')).toHaveText('0');
+        expect(await page.evaluate(() => localStorage.getItem('typingGameHistory'))).toBeNull();
+    });
+
     test('words mode is chosen by keyboard, saved, and ends after the word count', async ({
         page,
     }) => {
@@ -265,6 +286,16 @@ test.describe('best scores', () => {
         expect(stored).toEqual([null, null]);
         await expect(page.locator('#high-score')).toHaveText('0');
     });
+});
+
+test('reduced motion turns off animations', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/');
+    const styles = await page.evaluate(() => ({
+        glow: getComputedStyle(document.querySelector('.background-glow')).animationName,
+        caret: getComputedStyle(document.querySelector('.current'), '::before').animationName,
+    }));
+    expect(styles).toEqual({ glow: 'none', caret: 'none' });
 });
 
 test('paste and drop are blocked', async ({ page }) => {

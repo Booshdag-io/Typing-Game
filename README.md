@@ -20,7 +20,8 @@ Open `index.html` in a browser, or serve the folder with any static file server.
 - **Ghost Mode**: records the timing of your best run and replays its position as a second cursor while you type.
 - **Results**: a modal with your WPM and accuracy, a line chart of your last ten runs at the current settings once you have two or more, and a button that copies a one-line summary to the clipboard.
 - **Sound**: short tones made with the Web Audio API for keypress, mistake, and completion. Can be turned off.
-- **Keyboard**: Tab restarts while you are typing. Escape closes a dialog.
+- **Keyboard**: Tab restarts while you are typing. Escape closes a dialog. Opening Settings during a run abandons the run.
+- **Reduced motion**: with the OS reduce-motion setting on, the background pulse, caret blink, and fades are turned off.
 
 Pasting into the input is blocked.
 
@@ -50,7 +51,7 @@ npm run format        # Prettier, write mode
 npm run check         # lint, format check, and tests
 ```
 
-`index.html`, `script.js`, and `style.css` are the whole app. The script runs at load and expects to be the last tag in `<body>`. Tests live in `tests/` and drive the real page with keystrokes; they cover time and words mode, WPM and accuracy math, the dialogs' keyboard handling, paste blocking, clipboard sharing, Ghost Mode replay, and recovery from corrupt `localStorage`.
+`index.html`, `script.js`, and `style.css` are the whole app. The script runs at load and expects to be the last tag in `<body>`. Tests live in `tests/` and drive the real page with keystrokes; they cover time and words mode, WPM and accuracy math, the dialogs' keyboard handling, reduced motion, paste blocking, clipboard sharing, Ghost Mode replay, and recovery from corrupt `localStorage`.
 
 Deployed with GitHub Pages from the `main` branch.
 

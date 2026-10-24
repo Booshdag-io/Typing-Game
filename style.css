@@ -747,3 +747,14 @@ footer {
     font-size: 0.8rem;
     color: var(--text-muted);
 }
+
+/* Respect the OS "reduce motion" setting: no looping animations or fades. */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation: none !important;
+        transition-duration: 0s !important;
+        transition-delay: 0s !important;
+    }
+}

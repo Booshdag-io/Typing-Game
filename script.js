@@ -589,7 +589,10 @@ function applySettingsToUI() {
     quoteDisplayElement.classList.toggle('blurred', gameState.isHardMode);
 }
 
+// Settings changes reset the game on close anyway, so a run in progress is
+// abandoned here instead of letting its clock run out behind the dialog.
 function openSettings() {
+    if (runtime.isStarted) resetGame();
     typingInputElement.blur();
     settingsModal.classList.add('show');
     focusInDialog(modeSelector.querySelector('.pill.active') || closeSettingsBtn);
