@@ -53,7 +53,7 @@ npm run check         # lint, format check, and tests
 
 `index.html`, `script.js`, and `style.css` are the whole app. The script runs at load and expects to be the last tag in `<body>`. Tests live in `tests/` and drive the real page with keystrokes; they cover time and words mode, WPM and accuracy math, the dialogs' keyboard handling, reduced motion, paste blocking, clipboard sharing, Ghost Mode replay, and recovery from corrupt `localStorage`.
 
-Deployed with GitHub Pages from the `main` branch.
+Each push to `main` runs lint, the format check, and the tests in GitHub Actions. If they pass, the same workflow publishes `index.html`, `script.js`, and `style.css` to GitHub Pages; if they fail, the live site is not changed.
 
 ## License
 
