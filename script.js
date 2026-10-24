@@ -30,6 +30,9 @@ const modalBestElement = document.getElementById('modal-best');
 const modalRawElement = document.getElementById('modal-raw');
 const modalCharsElement = document.getElementById('modal-chars');
 const modalTimeElement = document.getElementById('modal-time');
+const modalKeysElement = document.getElementById('modal-keys');
+const practiceBtn = document.getElementById('practice-btn');
+const practiceNote = document.getElementById('practice-note');
 const shareBtn = document.getElementById('share-btn');
 const playAgainBtn = document.getElementById('play-again-btn');
 const settingsBtn = document.getElementById('settings-btn');
@@ -62,6 +65,7 @@ const STORAGE_KEYS = {
     history: 'typingGameHistory',
     bests: 'typingGameBests',
     settings: 'typingGameSettings',
+    keyStats: 'typingGameKeyStats',
 };
 
 function loadJSON(key, fallback) {
@@ -89,7 +93,7 @@ const DEFAULT_SETTINGS = {
     mode: 'time', // 'time' or 'words'
     duration: 60, // seconds, time mode
     wordCount: 10, // words mode
-    category: 'common', // 'common' or a key of QUOTES (texts.js)
+    category: 'common', // 'common', 'weak', or a key of QUOTES (texts.js)
     isGhostEnabled: false,
     isHardMode: false,
     isSoundEnabled: true,
@@ -98,7 +102,7 @@ const DEFAULT_SETTINGS = {
     isStopOnError: false, // wrong keys do not advance the caret
 };
 
-const CATEGORIES = ['common', ...Object.keys(QUOTES)];
+const CATEGORIES = ['common', 'weak', ...Object.keys(QUOTES)];
 
 function sanitizeSettings(saved) {
     const settings = { ...DEFAULT_SETTINGS };
@@ -140,6 +144,7 @@ const runtime = {
     keystrokes: 0, // characters inserted, including ones later deleted
     mistakes: 0, // inserted characters that did not match
     ghostStrokes: [], // {t: ms since start, i: character index} for Ghost Mode
+    keyStats: {}, // {[expected character]: {attempts, misses}} for this run
     ghostTimeouts: [],
 };
 
@@ -152,6 +157,24 @@ if (!Array.isArray(runHistory)) runHistory = [];
 // Best run per settings combination: { [settingsKey]: { wpm, keystrokes } }.
 let bests = loadJSON(STORAGE_KEYS.bests, {});
 if (!bests || typeof bests !== 'object' || Array.isArray(bests)) bests = {};
+
+// Attempts and misses per expected character across all recorded runs.
+let keyStats = loadJSON(STORAGE_KEYS.keyStats, {});
+if (!keyStats || typeof keyStats !== 'object' || Array.isArray(keyStats)) keyStats = {};
+
+// Letters missed most often, by miss rate, among letters tried at least
+// WEAK_MIN_ATTEMPTS times. Used by the Weak Keys category.
+const WEAK_MIN_ATTEMPTS = 5;
+const WEAK_KEY_COUNT = 3;
+
+function weakestKeys() {
+    return Object.entries(keyStats)
+        .filter(([key, stat]) => /^[a-z]$/i.test(key) && stat && stat.misses > 0)
+        .filter(([, stat]) => stat.attempts >= WEAK_MIN_ATTEMPTS)
+        .sort(([, a], [, b]) => b.misses / b.attempts - a.misses / a.attempts)
+        .slice(0, WEAK_KEY_COUNT)
+        .map(([key]) => key.toLowerCase());
+}
 
 // Runs only compete with runs of the same mode, length, and category.
 function settingsKey() {
@@ -258,14 +281,14 @@ function pickQuote(categoryQuotes) {
 
 // Random common words with no word twice in a row, plus optional
 // punctuation (capitalized sentences, commas, full stops) and numbers.
-function commonWords(count) {
+function commonWords(count, list = COMMON_WORDS) {
     const words = [];
     let previous = '';
     let sentenceStart = true;
     for (let n = 0; n < count; n++) {
         let word;
         do {
-            word = COMMON_WORDS[Math.floor(Math.random() * COMMON_WORDS.length)];
+            word = list[Math.floor(Math.random() * list.length)];
         } while (word === previous);
         previous = word;
 
@@ -288,8 +311,19 @@ function commonWords(count) {
     return words.join(' ');
 }
 
+// Common words that contain at least one of the given letters. Falls back
+// to the whole list when too few words match.
+function wordsWithKeys(keys) {
+    const matching = COMMON_WORDS.filter((word) => keys.some((key) => word.includes(key)));
+    return matching.length >= 10 ? matching : COMMON_WORDS;
+}
+
 // Returns { text, source } for the next passage.
 function getPassage() {
+    if (gameState.category === 'weak') {
+        const count = gameState.mode === 'words' ? gameState.wordCount : COMMON_CHUNK;
+        return { text: commonWords(count, wordsWithKeys(weakestKeys())), source: '' };
+    }
     if (gameState.category === 'common') {
         const count = gameState.mode === 'words' ? gameState.wordCount : COMMON_CHUNK;
         return { text: commonWords(count), source: '' };
@@ -372,7 +406,12 @@ function handleInput() {
             const pos = unchanged + k;
             if (pos >= quote.length) continue;
             runtime.keystrokes++;
-            if (inserted[k] !== quote[pos]) {
+            const expected = quote[pos];
+            const stat = runtime.keyStats[expected] || { attempts: 0, misses: 0 };
+            runtime.keyStats[expected] = stat;
+            stat.attempts++;
+            if (inserted[k] !== expected) {
+                stat.misses++;
                 wrong++;
                 if (firstWrong === -1) firstWrong = pos;
             }
@@ -525,6 +564,15 @@ function endGame(endTime = Date.now()) {
         runHistory.length = Math.min(runHistory.length, HISTORY_LIMIT);
         saveJSON(STORAGE_KEYS.history, runHistory);
 
+        for (const [key, stat] of Object.entries(runtime.keyStats)) {
+            const total = keyStats[key] || { attempts: 0, misses: 0 };
+            keyStats[key] = {
+                attempts: total.attempts + stat.attempts,
+                misses: total.misses + stat.misses,
+            };
+        }
+        saveJSON(STORAGE_KEYS.keyStats, keyStats);
+
         if (wpm > (previousBest ? previousBest.wpm : 0)) {
             bests[key] = { wpm, keystrokes: runtime.ghostStrokes };
             saveJSON(STORAGE_KEYS.bests, bests);
@@ -620,6 +668,7 @@ function resetGame() {
         keystrokes: 0,
         mistakes: 0,
         ghostStrokes: [],
+        keyStats: {},
     });
 
     runtime.timer = gameState.mode === 'time' ? gameState.duration : 0;
@@ -647,6 +696,12 @@ function updateQuickBar() {
     quickDuration.classList.toggle('hidden', gameState.mode !== 'time');
     quickWordCount.classList.toggle('hidden', gameState.mode !== 'words');
     ghostBadge.classList.toggle('hidden', !gameState.isGhostEnabled);
+
+    const weak = weakestKeys();
+    practiceNote.classList.toggle('hidden', gameState.category !== 'weak');
+    practiceNote.textContent = weak.length
+        ? `Practicing: ${weak.join(', ')}`
+        : 'Not enough mistakes recorded yet. Using all common words.';
 }
 
 function updateHighScoreDisplay() {
@@ -684,6 +739,18 @@ function showResultModal(wpm, accuracy, { isNewBest, previousBest }) {
         modalBestElement.textContent = `Best for these settings: ${previousBest.wpm} WPM.`;
     }
     modalBestElement.classList.toggle('new-best', isNewBest && Boolean(previousBest));
+
+    const missed = Object.entries(runtime.keyStats)
+        .filter(([, stat]) => stat.misses > 0)
+        .sort(([, a], [, b]) => b.misses - a.misses || a.attempts - b.attempts)
+        .slice(0, 3)
+        .map(
+            ([key, stat]) => `${key === ' ' ? 'space' : key} (${stat.misses} of ${stat.attempts})`
+        );
+    modalKeysElement.textContent = missed.length
+        ? `Most missed keys: ${missed.join(', ')}`
+        : 'No missed keys.';
+    practiceBtn.classList.toggle('hidden', weakestKeys().length === 0);
     modalSourceElement.textContent = runtime.quoteSource;
     modalSourceElement.classList.toggle('hidden', !runtime.quoteSource);
     resultModal.classList.add('show');
@@ -971,6 +1038,12 @@ function init() {
 
     shareBtn.addEventListener('click', shareResult);
     playAgainBtn.addEventListener('click', resetGame);
+    practiceBtn.addEventListener('click', () => {
+        gameState.category = 'weak';
+        categorySelect.value = 'weak';
+        saveSettings();
+        resetGame();
+    });
 
     document.addEventListener('keydown', handleKeydown);
 

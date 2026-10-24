@@ -87,10 +87,12 @@
                         <label for="category-select" class="visually-hidden">Text category</label>
                         <select id="category-select" class="category-select">
                             <option value="common">Common Words</option>
+                            <option value="weak">Weak Keys</option>
                             <option value="general">Quotes</option>
                             <option value="technology">Technology</option>
                             <option value="code">Code Snippets</option>
                         </select>
+                        <p id="practice-note" class="practice-note hidden"></p>
                     </div>
 
                     <div class="control-group right">
@@ -220,6 +222,8 @@
                     </div>
                 </dl>
 
+                <p id="modal-keys" class="modal-keys"></p>
+
                 <p id="modal-source" class="modal-source hidden"></p>
 
                 <div class="chart-row">
@@ -252,6 +256,9 @@
 
                 <div class="modal-actions">
                     <button id="share-btn" class="action-btn secondary">Share Result</button>
+                    <button id="practice-btn" class="action-btn secondary hidden">
+                        Practice weak keys
+                    </button>
                     <button id="play-again-btn" class="action-btn primary">Play Again</button>
                 </div>
             </div>

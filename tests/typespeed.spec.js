@@ -946,3 +946,77 @@ test('the result dialog is positioned against the viewport, not the page card', 
     const title = await page.locator('#result-title').boundingBox();
     expect(title.y).toBeGreaterThanOrEqual(0);
 });
+
+test.describe('weak keys', () => {
+    test('counts misses per expected key and shows the most missed after a run', async ({
+        page,
+    }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('typingGameSettings', JSON.stringify({ mode: 'words' }));
+        });
+        await page.goto('/');
+        const quote = await currentQuote(page);
+        const wrong = (c) => (c === 'x' ? 'y' : 'x');
+
+        // Miss the first character twice, fixing it each time.
+        await input(page).press(wrong(quote[0]));
+        await input(page).press('Backspace');
+        await input(page).press(wrong(quote[0]));
+        await input(page).press('Backspace');
+        await input(page).pressSequentially(quote, { delay: 40 });
+
+        const stat = await page.evaluate((key) => runtime.keyStats[key], quote[0]);
+        expect(stat.misses).toBe(2);
+        expect(stat.attempts).toBeGreaterThanOrEqual(3);
+        await expect(page.locator('#modal-keys')).toHaveText(
+            new RegExp(`^Most missed keys: ${quote[0]} \\(2 of \\d+\\)$`)
+        );
+
+        // The totals are saved and survive a reload.
+        await page.reload();
+        const saved = await page.evaluate(
+            (key) => JSON.parse(localStorage.getItem('typingGameKeyStats'))[key],
+            quote[0]
+        );
+        expect(saved).toEqual(stat);
+    });
+
+    test('Practice weak keys starts a run of words containing the weakest letters', async ({
+        page,
+    }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('typingGameSettings', JSON.stringify({ mode: 'words' }));
+            localStorage.setItem(
+                'typingGameKeyStats',
+                JSON.stringify({
+                    k: { attempts: 10, misses: 5 },
+                    v: { attempts: 10, misses: 4 },
+                    e: { attempts: 100, misses: 1 },
+                    w: { attempts: 2, misses: 2 }, // too few attempts to count
+                    ';': { attempts: 10, misses: 9 }, // not a letter
+                })
+            );
+        });
+        await page.goto('/');
+        await input(page).pressSequentially(await currentQuote(page), { delay: 40 });
+        await expect(page.locator('#practice-btn')).toBeVisible();
+        await page.locator('#practice-btn').click();
+
+        await expect(page.locator('#category-select')).toHaveValue('weak');
+        await expect(page.locator('#practice-note')).toHaveText('Practicing: k, v, e');
+        const words = (await currentQuote(page)).split(' ');
+        expect(words).toHaveLength(10);
+        for (const word of words) expect(word).toMatch(/[kve]/);
+        expect(await page.evaluate(() => settingsKey())).toBe('words:10w:weak');
+    });
+
+    test('hides the practice button until a letter has enough misses', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('typingGameSettings', JSON.stringify({ mode: 'words' }));
+        });
+        await page.goto('/');
+        await input(page).pressSequentially(await currentQuote(page), { delay: 40 });
+        await expect(page.locator('#modal-keys')).toHaveText('No missed keys.');
+        await expect(page.locator('#practice-btn')).toBeHidden();
+    });
+});
