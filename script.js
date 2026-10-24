@@ -103,7 +103,7 @@ let runtime = {
     keystrokes: [] // Array of {time: ms, charIndex: int} for Ghost
 };
 
-let history = JSON.parse(localStorage.getItem('typingGameHistory')) || [];
+let runHistory = JSON.parse(localStorage.getItem('typingGameHistory')) || [];
 let bestRun = JSON.parse(localStorage.getItem('typingGameBestRun')) || null;
 
 // --- Audio System ---
@@ -233,6 +233,7 @@ function handleInput(e) {
         characterSpan.classList.remove('correct', 'incorrect', 'current');
         
         if (character == null) {
+            // Not typed yet; leave the span unmarked.
         } else if (character === characterSpan.innerText) {
             characterSpan.classList.add('correct');
             correctCount++;
@@ -346,9 +347,9 @@ function endGame() {
         date: new Date().toISOString(),
         mode: gameState.mode
     };
-    history.unshift(result);
-    if (history.length > 10) history.pop();
-    localStorage.setItem('typingGameHistory', JSON.stringify(history));
+    runHistory.unshift(result);
+    if (runHistory.length > 10) runHistory.pop();
+    localStorage.setItem('typingGameHistory', JSON.stringify(runHistory));
     
     // Check Best Run (Simple WPM check for now)
     const currentHighScore = parseInt(localStorage.getItem('typingGameHighScore') || 0);
@@ -369,7 +370,7 @@ function endGame() {
 
 function renderChart() {
     // Simple SVG Line Chart
-    const data = history.map(h => h.wpm).reverse(); // Oldest to newest
+    const data = runHistory.map(h => h.wpm).reverse(); // Oldest to newest
     if (data.length < 2) return;
 
     const width = 300;

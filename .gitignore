@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Claude Code (local AI config, not part of the app)
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+.playwright-mcp/
+
+# Other AI tool config
+.cursor/
+.cursorrules
+.codex/
+.gemini/
+GEMINI.md
+AGENTS.md
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+npm-debug.log*
