@@ -63,6 +63,21 @@ test.describe('loading', () => {
         expect(errors).toEqual([]);
     });
 
+    test('says there is no account and data stays in this browser', async ({ page }) => {
+        await page.goto('/');
+        await expect(page.locator('footer')).toContainText(
+            'No account. Your results are stored only in this browser.'
+        );
+        await expect(page.locator('footer a')).toHaveAttribute(
+            'href',
+            'https://github.com/TMHSDigital/Typing-Game#privacy'
+        );
+        await page.locator('#stats-btn').click();
+        await expect(page.locator('#stats-modal .stats-note')).toHaveText(
+            'Stored in this browser only. Export to keep a copy or move to another device.'
+        );
+    });
+
     test('ignores corrupt localStorage instead of crashing', async ({ page }) => {
         await page.addInitScript(() => {
             localStorage.setItem('typingGameSettings', '{not json');

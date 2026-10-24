@@ -664,6 +664,16 @@ footer {
     letter-spacing: 0.2em;
 }
 
+.footer-note {
+    margin-top: 0.5rem;
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+.footer-note a {
+    color: inherit;
+}
+
 /* Responsive */
 @media (max-width: 640px) {
     .container {
@@ -872,6 +882,12 @@ footer {
 
 .stats-table td.num {
     font-family: var(--font-code);
+}
+
+.stats-note {
+    margin-top: 1rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
 }
 
 .stats-status {

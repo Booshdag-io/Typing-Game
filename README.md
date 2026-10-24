@@ -47,6 +47,12 @@ Serve the folder with `npm run serve` (see Development) or any static file serve
 
 Pasting into the input is blocked, and the caret stays at the end: arrow keys, Home, End, select-all, and clicks do not move it.
 
+## Privacy
+
+There is no account and no backend: GitHub Pages serves the static files, and the page makes no requests to other sites, which a test checks. Settings, run history, best scores, and key stats are stored in this browser's `localStorage`, under the keys listed below, and are not sent anywhere. Challenge links carry one run's settings, seed, WPM, and keystroke timings in the URL hash, which browsers do not send to the server; they leave the browser only if you share the link.
+
+Clearing the browser's site data deletes everything. To keep a copy or move to another device, use Export in the Stats dialog and Import on the other side. Clear data in the same dialog removes history, bests, and key stats.
+
 ## Settings and data
 
 Everything is stored in `localStorage` under these keys:
