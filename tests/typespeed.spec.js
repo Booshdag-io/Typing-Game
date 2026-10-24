@@ -1395,6 +1395,55 @@ test.describe('challenge links', () => {
         await fresh.close();
     });
 
+    test('a failed copy shows the link, selected, in the result dialog', async ({ page }) => {
+        await page.addInitScript(() => {
+            navigator.clipboard.writeText = async () => {
+                throw new DOMException('Not allowed', 'NotAllowedError');
+            };
+        });
+        await page.addInitScript(() => {
+            localStorage.setItem('typingGameSettings', JSON.stringify({ mode: 'words' }));
+        });
+        await page.goto('/');
+        await input(page).pressSequentially(await currentQuote(page), { delay: 40 });
+        await expect(page.locator('#challenge-link-row')).toBeHidden();
+        await page.locator('#challenge-btn').click();
+
+        await expect(page.locator('#challenge-btn')).toHaveText('Copy failed');
+        const link = page.locator('#challenge-link');
+        await expect(link).toBeVisible();
+        await expect(link).toBeFocused();
+        await expect(link).toHaveValue(/^http:\/\/127\.0\.0\.1:8765\/#c=[zj][A-Za-z0-9_-]+$/);
+        const selected = await link.evaluate((el) => el.selectionEnd - el.selectionStart);
+        expect(selected).toBe((await link.inputValue()).length);
+
+        // The next result starts with the link hidden again.
+        await page.locator('#play-again-btn').click();
+        await input(page).pressSequentially(await currentQuote(page), { delay: 40 });
+        await expect(page.locator('#challenge-link-row')).toBeHidden();
+    });
+
+    test('on touch devices the link goes to the share sheet', async ({ browser }) => {
+        const context = await browser.newContext({ hasTouch: true, isMobile: false });
+        const page = await context.newPage();
+        await page.addInitScript(() => {
+            const coarse = window.matchMedia('(pointer: coarse)');
+            window.matchMedia = (query) =>
+                query === '(pointer: coarse)' ? { ...coarse, matches: true } : coarse;
+            navigator.share = async (data) => {
+                window.sharedData = data;
+            };
+            localStorage.setItem('typingGameSettings', JSON.stringify({ mode: 'words' }));
+        });
+        await page.goto('/');
+        await input(page).pressSequentially(await currentQuote(page), { delay: 40 });
+        await page.locator('#challenge-btn').click();
+        await expect
+            .poll(() => page.evaluate(() => window.sharedData && window.sharedData.url))
+            .toMatch(/^http:\/\/127\.0\.0\.1:8765\/#c=[zj][A-Za-z0-9_-]+$/);
+        await context.close();
+    });
+
     test('a link opened in a tab that already has the page starts the challenge', async ({
         page,
     }) => {

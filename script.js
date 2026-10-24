@@ -35,6 +35,8 @@ const practiceBtn = document.getElementById('practice-btn');
 const practiceNote = document.getElementById('practice-note');
 const challengeBtn = document.getElementById('challenge-btn');
 const modalChallengeElement = document.getElementById('modal-challenge');
+const challengeLinkRow = document.getElementById('challenge-link-row');
+const challengeLinkInput = document.getElementById('challenge-link');
 const shareBtn = document.getElementById('share-btn');
 const playAgainBtn = document.getElementById('play-again-btn');
 const settingsBtn = document.getElementById('settings-btn');
@@ -211,6 +213,7 @@ const runtime = {
     challenge: null, // decoded challenge link, kept across resets until a run uses it
     indent: [], // per character of quoteText: true for indentation Skip indentation fills in
     ghostTimeouts: [],
+    challengeUrl: '', // link for the finished run, built when the result dialog opens
 };
 
 const HISTORY_LIMIT = 500;
@@ -874,6 +877,7 @@ function resetGame() {
         ghostStrokes: [],
         keyStats: {},
         ghostIndex: 0,
+        challengeUrl: '',
     });
 
     // With Ghost Mode on and a best that recorded its seed, replay the same
@@ -977,8 +981,11 @@ function showResultModal(wpm, accuracy, { isNewBest, previousBest }) {
         : 'No missed keys.';
     practiceBtn.classList.toggle('hidden', weakestKeys().length === 0);
     // A custom text stays on this device, so it cannot be sent as a challenge.
-    challengeBtn.classList.toggle('hidden', elapsed < 1000 || gameState.category === 'custom');
+    const canChallenge = elapsed >= 1000 && gameState.category !== 'custom';
+    challengeBtn.classList.toggle('hidden', !canChallenge);
     challengeBtn.textContent = 'Copy challenge link';
+    challengeLinkRow.classList.add('hidden');
+    if (canChallenge) prepareChallengeUrl();
 
     const challenge = runtime.challenge;
     modalChallengeElement.classList.toggle('hidden', !challenge);
@@ -1157,14 +1164,52 @@ function challengePayload() {
     };
 }
 
+async function buildChallengeUrl() {
+    const code = await encodeChallenge(challengePayload());
+    return `${location.origin}${location.pathname}#c=${code}`;
+}
+
+// Safari allows clipboard writes and the share sheet only during the click
+// itself, and encoding is async. So the link is built when the result
+// dialog opens, and the click uses it without waiting.
+function prepareChallengeUrl() {
+    const strokes = runtime.ghostStrokes;
+    buildChallengeUrl()
+        .then((url) => {
+            if (runtime.ghostStrokes === strokes) runtime.challengeUrl = url;
+        })
+        .catch(() => {});
+}
+
+// Like Share Result: the share sheet on phones, the clipboard elsewhere. If
+// neither works, the link is shown so it can be copied by hand.
 async function copyChallengeLink() {
+    let url = runtime.challengeUrl;
     try {
-        const code = await encodeChallenge(challengePayload());
-        const url = `${location.origin}${location.pathname}#c=${code}`;
+        if (!url) url = await buildChallengeUrl();
+    } catch {
+        challengeBtn.textContent = 'Copy failed';
+        return;
+    }
+    const touch = window.matchMedia('(pointer: coarse)').matches;
+    if (touch && navigator.share) {
+        try {
+            await navigator.share({ title: 'TypeSpeed challenge', url });
+            return;
+        } catch (err) {
+            // Dismissing the share sheet rejects; anything else falls through.
+            if (err && err.name === 'AbortError') return;
+        }
+    }
+    try {
         await navigator.clipboard.writeText(url);
         challengeBtn.textContent = 'Link copied';
     } catch {
         challengeBtn.textContent = 'Copy failed';
+        challengeLinkInput.value = url;
+        challengeLinkRow.classList.remove('hidden');
+        challengeLinkInput.focus();
+        challengeLinkInput.select();
     }
 }
 
