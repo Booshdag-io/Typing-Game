@@ -348,7 +348,9 @@ test('share copies a summary to the clipboard', async ({ page }) => {
     await page.locator('#share-btn').click();
     await expect(page.locator('#share-btn')).toHaveText('Copied!');
     const clipboard = await page.evaluate(() => window.copiedText);
-    expect(clipboard).toMatch(/^\d+ WPM at \d+% accuracy on TypeSpeed$/);
+    expect(clipboard).toMatch(
+        /^\d+ WPM, \d+% accuracy, 10 words General on TypeSpeed https:\/\/tmhsdigital\.github\.io\/Typing-Game\/$/
+    );
     await expect(page.locator('#share-btn')).toHaveText('Share Result', { timeout: 3000 });
 });
 
@@ -670,4 +672,30 @@ test('feature toggles are saved and applied after a reload', async ({ page }) =>
     await expect(page.locator('#ghost-mode-toggle')).toBeChecked();
     await expect(page.locator('#quote-display')).toHaveClass(/blurred/);
     await expect(page.locator('#ghost-badge')).toBeVisible();
+});
+
+test('share opens the system share sheet on touch devices', async ({ browser }) => {
+    const context = await browser.newContext({ hasTouch: true, isMobile: false });
+    const page = await context.newPage();
+    await page.addInitScript(() => {
+        // Report a touch screen and record what would be shared.
+        const coarse = window.matchMedia('(pointer: coarse)');
+        window.matchMedia = (query) =>
+            query === '(pointer: coarse)' ? { ...coarse, matches: true } : coarse;
+        navigator.share = async (data) => {
+            window.sharedData = data;
+        };
+    });
+    await page.goto('/');
+    await page.evaluate(() => {
+        gameState.mode = 'words';
+    });
+    await page.locator('#reset-button').click();
+    await input(page).pressSequentially(await currentQuote(page));
+    await page.locator('#share-btn').click();
+
+    const shared = await page.evaluate(() => window.sharedData);
+    expect(shared.url).toBe('https://tmhsdigital.github.io/Typing-Game/');
+    expect(shared.text).toMatch(/^\d+ WPM, \d+% accuracy, 10 words General on TypeSpeed$/);
+    await context.close();
 });

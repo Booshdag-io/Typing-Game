@@ -587,6 +587,44 @@ function showResultModal(wpm, accuracy) {
     focusInDialog(playAgainBtn);
 }
 
+// --- Sharing ---
+const SITE_URL = 'https://tmhsdigital.github.io/Typing-Game/';
+
+function settingsLabel() {
+    const length =
+        gameState.mode === 'time' ? `${gameState.duration}s` : `${gameState.wordCount} words`;
+    const category = categorySelect.selectedOptions[0]?.textContent || gameState.category;
+    return `${length} ${category}`;
+}
+
+function shareText() {
+    return `${modalWpmElement.textContent} WPM, ${modalAccuracyElement.textContent} accuracy, ${settingsLabel()} on TypeSpeed`;
+}
+
+// Phones get the system share sheet. Desktops, where navigator.share opens
+// an OS dialog people do not expect, copy to the clipboard.
+async function shareResult() {
+    const text = shareText();
+    const touch = window.matchMedia('(pointer: coarse)').matches;
+    if (touch && navigator.share) {
+        try {
+            await navigator.share({ title: 'TypeSpeed', text, url: SITE_URL });
+        } catch {
+            // Dismissing the share sheet rejects; nothing to report.
+        }
+        return;
+    }
+    try {
+        await navigator.clipboard.writeText(`${text} ${SITE_URL}`);
+        shareBtn.textContent = 'Copied!';
+    } catch {
+        shareBtn.textContent = 'Copy failed';
+    }
+    setTimeout(() => {
+        shareBtn.textContent = 'Share Result';
+    }, 2000);
+}
+
 // --- Settings ---
 function saveSettings() {
     saveJSON(STORAGE_KEYS.settings, gameState);
@@ -791,18 +829,7 @@ function init() {
         gameState.isGhostEnabled = e.target.checked;
     });
 
-    shareBtn.addEventListener('click', async () => {
-        const text = `${modalWpmElement.textContent} WPM at ${modalAccuracyElement.textContent} accuracy on TypeSpeed`;
-        try {
-            await navigator.clipboard.writeText(text);
-            shareBtn.textContent = 'Copied!';
-        } catch {
-            shareBtn.textContent = 'Copy failed';
-        }
-        setTimeout(() => {
-            shareBtn.textContent = 'Share Result';
-        }, 2000);
-    });
+    shareBtn.addEventListener('click', shareResult);
     playAgainBtn.addEventListener('click', resetGame);
 
     document.addEventListener('keydown', handleKeydown);
