@@ -594,7 +594,7 @@ function handleInput() {
     runtime.previousValue = typed;
 
     runtime.ghostStrokes.push({
-        t: Date.now() - runtime.startTime,
+        t: Math.round(performance.now() - runtime.startTime),
         i: runtime.quoteBase + typed.length,
     });
 
@@ -638,13 +638,13 @@ function handleInput() {
 }
 
 function elapsedMs() {
-    const end = runtime.endTime || Date.now();
+    const end = runtime.endTime || performance.now();
     return end - runtime.startTime;
 }
 
 function startGame() {
     runtime.isStarted = true;
-    runtime.startTime = Date.now();
+    runtime.startTime = performance.now();
     runtime.endTime = 0;
     containerElement.classList.add('focus-mode');
 
@@ -743,7 +743,7 @@ function updateMetrics() {
     return { wpm, accuracy };
 }
 
-function endGame(endTime = Date.now()) {
+function endGame(endTime = performance.now()) {
     if (!runtime.isStarted) return;
     runtime.isStarted = false;
     runtime.endTime = endTime;

@@ -3,7 +3,7 @@
 /* global runtime, gameState, resultModal, typingInputElement, wpmElement, updateMetrics,
    getPassage, settingsKey, COMMON_WORDS, QUOTES, renderNewQuote, parseChallenge,
    decodeChallenge, encodeChallenge, normalizeCustomText, CODE_SNIPPETS, playSound, playVoice,
-   getAudioContext, audio, SOUNDS */
+   getAudioContext, audio, SOUNDS, timerElement, tick */
 
 const { test, expect } = require('@playwright/test');
 const { default: AxeBuilder } = require('@axe-core/playwright');
@@ -141,11 +141,36 @@ test.describe('time mode', () => {
         const metrics = await page.evaluate(() => ({
             wpm: Number(wpmElement.textContent),
             correct: runtime.correctChars,
-            elapsed: Date.now() - runtime.startTime,
+            elapsed: performance.now() - runtime.startTime,
         }));
         expect(metrics.correct).toBe(20);
         expect(metrics.elapsed).toBe(30_000);
         expect(metrics.wpm).toBe(Math.round(20 / 5 / (30_000 / 60_000)));
+    });
+
+    test('a system clock change during a run does not move the timer or WPM', async ({ page }) => {
+        await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+        await page.goto('/');
+        await page.clock.pauseAt(new Date('2026-01-01T00:00:10Z'));
+        const quote = await currentQuote(page);
+        await input(page).pressSequentially(quote.slice(0, 20));
+        await page.clock.runFor(30_000);
+        const before = await page.evaluate(() => [
+            wpmElement.textContent,
+            timerElement.textContent,
+        ]);
+        expect(before[1]).toBe('30');
+
+        // The clock jumps an hour ahead, as after an NTP sync or sleep.
+        await page.clock.setSystemTime(new Date('2026-01-01T01:00:40Z'));
+        await page.evaluate(() => tick());
+        expect(
+            await page.evaluate(() => [
+                wpmElement.textContent,
+                timerElement.textContent,
+                runtime.isStarted,
+            ])
+        ).toEqual([...before, true]);
     });
 });
 
@@ -475,8 +500,8 @@ test.describe('input', () => {
         await page.clock.runFor(59_900);
 
         // Move past the deadline without letting the 250 ms interval fire.
-        const start = await page.evaluate(() => runtime.startTime);
-        await page.clock.setSystemTime(start + 60_200);
+        await page.evaluate(() => clearInterval(runtime.interval));
+        await page.clock.runFor(300);
         await input(page).press(quote[5]);
 
         expect(await page.evaluate(() => [runtime.correctChars, runtime.isStarted])).toEqual([
