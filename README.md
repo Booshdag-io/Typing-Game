@@ -1,6 +1,6 @@
 # TypeSpeed
 
-A typing trainer that runs in the browser. Three files, no framework, no build step.
+A typing trainer that runs in the browser. Plain HTML, CSS, and JavaScript, no framework, no build step.
 
 Live: https://tmhsdigital.github.io/Typing-Game/
 
@@ -12,7 +12,14 @@ Open `index.html` in a browser, or serve the folder with any static file server.
 
 - **Time mode**: type for 15, 30, or 60 seconds. When you finish a passage a new one loads until the clock runs out.
 - **Words mode**: type a fixed 10, 25, or 50 words. The clock counts up.
-- **Categories**: General and Technology quotes, or Code Snippets (a mix of JavaScript, CSS, SQL, and shell lines).
+- **Categories**:
+  - Common Words (the default): 200 frequent English words in random order, never the same word twice in a row. Settings can add punctuation (capitalized sentences, commas, full stops) and numbers.
+  - Quotes: 50 passages, most of them opening lines of public-domain books.
+  - Technology: 50 quotes about programming and computing.
+  - Code Snippets: a mix of JavaScript, CSS, SQL, and shell lines.
+
+  When the source of a passage is known, the result dialog shows it. Passages are in `texts.js`.
+
 - **Stats**: WPM, accuracy, mistakes, and your best WPM for the current settings, updated as you type.
   - WPM is correct characters divided by five, per minute of real elapsed time.
   - Accuracy is the share of typed characters that matched, counting mistakes you later fixed. It is rounded down, so 100% means no mistakes.
@@ -33,11 +40,11 @@ Everything is stored in `localStorage` under these keys:
 
 | Key                  | Contents                                                                     |
 | -------------------- | ---------------------------------------------------------------------------- |
-| `typingGameSettings` | mode, duration, word count, category, and the three toggles                  |
+| `typingGameSettings` | mode, duration, word count, category, and the feature toggles                |
 | `typingGameHistory`  | last 50 runs as `{wpm, accuracy, date, mode, key}`                           |
 | `typingGameBests`    | best WPM and its keystroke timings for each settings key, used by Ghost Mode |
 
-A settings key combines mode, length, and category, for example `time:60s:general` or `words:25w:code`. Best scores, Ghost Mode, and the chart only compare runs with the same key. Runs that finish in under a second are shown but not saved.
+A settings key combines mode, length, and category, for example `time:60s:common` or `words:25w:code`. Common Words with punctuation or numbers adds them to the category, as in `time:30s:common+punctuation+numbers`. Best scores, Ghost Mode, and the chart only compare runs with the same key. Runs that finish in under a second are shown but not saved.
 
 ## Development
 
@@ -53,9 +60,9 @@ npm run format        # Prettier, write mode
 npm run check         # lint, format check, and tests
 ```
 
-`index.html`, `script.js`, and `style.css` are the whole app. The script runs at load and expects to be the last tag in `<body>`. Tests live in `tests/` and drive the real page with keystrokes in Chromium, Firefox, and WebKit. Each item under "What it does" has at least one test, as do recovery from corrupt `localStorage`, the contrast check, and the absence of requests to other sites.
+`index.html`, `texts.js`, `script.js`, and `style.css` are the whole app. The script runs at load and expects to be the last tag in `<body>`. Tests live in `tests/` and drive the real page with keystrokes in Chromium, Firefox, and WebKit. Each item under "What it does" has at least one test, as do recovery from corrupt `localStorage`, the contrast check, and the absence of requests to other sites.
 
-Each push to `main` runs lint, the format check, and the tests in GitHub Actions. If they pass, the same workflow publishes `index.html`, `script.js`, `style.css`, and `fonts/` to GitHub Pages; if they fail, the live site is not changed.
+Each push to `main` runs lint, the format check, and the tests in GitHub Actions. If they pass, the same workflow publishes `index.html`, `texts.js`, `script.js`, `style.css`, and `fonts/` to GitHub Pages; if they fail, the live site is not changed.
 
 ## License
 

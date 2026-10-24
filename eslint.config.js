@@ -11,11 +11,22 @@ module.exports = [
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: 'script',
-            globals: { ...globals.browser },
+            // Declared in texts.js, which loads first.
+            globals: { ...globals.browser, COMMON_WORDS: 'readonly', QUOTES: 'readonly' },
         },
         rules: {
             'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
         },
+    },
+    {
+        files: ['texts.js'],
+        languageOptions: {
+            ecmaVersion: 2022,
+            sourceType: 'script',
+            globals: { ...globals.browser },
+        },
+        // The constants are used by script.js.
+        rules: { 'no-unused-vars': 'off' },
     },
     {
         files: ['tests/**/*.js', 'playwright.config.js', 'eslint.config.js'],

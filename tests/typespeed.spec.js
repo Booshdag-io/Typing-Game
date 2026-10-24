@@ -1,6 +1,7 @@
 // End-to-end tests against the real page. page.evaluate callbacks run in the
 // browser, where script.js's top-level consts are in scope.
-/* global runtime, gameState, resultModal, typingInputElement, wpmElement, updateMetrics */
+/* global runtime, gameState, resultModal, typingInputElement, wpmElement, updateMetrics,
+   getPassage, settingsKey, COMMON_WORDS, QUOTES */
 
 const { test, expect } = require('@playwright/test');
 const { default: AxeBuilder } = require('@axe-core/playwright');
@@ -247,7 +248,7 @@ test.describe('settings dialog', () => {
         );
         expect(history).toHaveLength(1);
         expect(history[0].mode).toBe('words');
-        expect(history[0].key).toBe('words:10w:general');
+        expect(history[0].key).toBe('words:10w:common');
 
         // A second run makes the chart appear.
         await page.keyboard.press('Enter');
@@ -269,8 +270,8 @@ test.describe('best scores', () => {
             localStorage.setItem(
                 'typingGameBests',
                 JSON.stringify({
-                    'time:60s:general': { wpm: 40, keystrokes: [] },
-                    'words:10w:general': { wpm: 70, keystrokes: [] },
+                    'time:60s:common': { wpm: 40, keystrokes: [] },
+                    'words:10w:common': { wpm: 70, keystrokes: [] },
                 })
             );
         });
@@ -349,7 +350,7 @@ test('share copies a summary to the clipboard', async ({ page }) => {
     await expect(page.locator('#share-btn')).toHaveText('Copied!');
     const clipboard = await page.evaluate(() => window.copiedText);
     expect(clipboard).toMatch(
-        /^\d+ WPM, \d+% accuracy, 10 words General on TypeSpeed https:\/\/tmhsdigital\.github\.io\/Typing-Game\/$/
+        /^\d+ WPM, \d+% accuracy, 10 words Common Words on TypeSpeed https:\/\/tmhsdigital\.github\.io\/Typing-Game\/$/
     );
     await expect(page.locator('#share-btn')).toHaveText('Share Result', { timeout: 3000 });
 });
@@ -359,7 +360,7 @@ test('restarting during a ghost replay cancels the pending moves', async ({ page
         localStorage.setItem(
             'typingGameBests',
             JSON.stringify({
-                'time:60s:general': {
+                'time:60s:common': {
                     wpm: 40,
                     keystrokes: Array.from({ length: 30 }, (_, i) => ({
                         t: 100 + i * 200,
@@ -496,7 +497,7 @@ test('ghost cursor lines up with its character while focus mode scales the text'
         localStorage.setItem(
             'typingGameBests',
             JSON.stringify({
-                'time:60s:general': { wpm: 40, keystrokes: [{ t: 0, i: 30 }] },
+                'time:60s:common': { wpm: 40, keystrokes: [{ t: 0, i: 30 }] },
             })
         );
         localStorage.setItem('typingGameSettings', JSON.stringify({ isGhostEnabled: true }));
@@ -696,6 +697,103 @@ test('share opens the system share sheet on touch devices', async ({ browser }) 
 
     const shared = await page.evaluate(() => window.sharedData);
     expect(shared.url).toBe('https://tmhsdigital.github.io/Typing-Game/');
-    expect(shared.text).toMatch(/^\d+ WPM, \d+% accuracy, 10 words General on TypeSpeed$/);
+    expect(shared.text).toMatch(/^\d+ WPM, \d+% accuracy, 10 words Common Words on TypeSpeed$/);
     await context.close();
+});
+
+test.describe('text', () => {
+    test('defaults to common words with no word twice in a row', async ({ page }) => {
+        await page.goto('/');
+        await expect(page.locator('#category-select')).toHaveValue('common');
+        const words = (await currentQuote(page)).split(' ');
+        expect(words).toHaveLength(25);
+        const known = await page.evaluate(() => COMMON_WORDS);
+        for (const word of words) expect(known).toContain(word);
+        for (let i = 1; i < words.length; i++) expect(words[i]).not.toBe(words[i - 1]);
+    });
+
+    test('ten 50-word runs share no five-word sequence', async ({ page }) => {
+        await page.goto('/');
+        const texts = await page.evaluate(() => {
+            gameState.mode = 'words';
+            gameState.wordCount = 50;
+            return Array.from({ length: 10 }, () => getPassage().text);
+        });
+        const seen = new Set();
+        for (const text of texts) {
+            const words = text.split(' ');
+            expect(words).toHaveLength(50);
+            for (let i = 0; i + 5 <= words.length; i++) {
+                const gram = words.slice(i, i + 5).join(' ');
+                expect(seen.has(gram)).toBe(false);
+                seen.add(gram);
+            }
+        }
+    });
+
+    test('punctuation and numbers change the text and get their own best scores', async ({
+        page,
+    }) => {
+        await page.goto('/');
+        const result = await page.evaluate(() => {
+            gameState.mode = 'words';
+            gameState.wordCount = 50;
+            gameState.hasPunctuation = true;
+            gameState.hasNumbers = true;
+            const texts = Array.from({ length: 5 }, () => getPassage().text).join(' ');
+            return { texts, key: settingsKey() };
+        });
+        expect(result.texts).toMatch(/^[A-Z]/);
+        expect(result.texts).toMatch(/[.?]$/);
+        expect(result.texts).toMatch(/\d/);
+        expect(result.key).toBe('words:50w:common+punctuation+numbers');
+
+        // The toggles are in Settings and are saved.
+        await page.evaluate(() => {
+            gameState.hasPunctuation = false;
+            gameState.hasNumbers = false;
+        });
+        await page.locator('#settings-btn').click();
+        await page.locator('label', { hasText: 'Punctuation' }).click();
+        await page.locator('#close-settings-btn').click();
+        expect(
+            await page.evaluate(() => JSON.parse(localStorage.getItem('typingGameSettings')))
+        ).toMatchObject({ hasPunctuation: true, hasNumbers: false });
+    });
+
+    test('every quote category has at least 50 passages', async ({ page }) => {
+        await page.goto('/');
+        const counts = await page.evaluate(() =>
+            Object.fromEntries(Object.entries(QUOTES).map(([key, list]) => [key, list.length]))
+        );
+        expect(counts.general).toBeGreaterThanOrEqual(50);
+        expect(counts.technology).toBeGreaterThanOrEqual(50);
+    });
+
+    test('the result dialog shows where the passage is from', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('typingGameSettings', JSON.stringify({ category: 'general' }));
+            // Always pick the last quote, which has a source.
+            Math.random = () => 0.9999;
+        });
+        await page.clock.install();
+        await page.goto('/');
+        const source = await page.evaluate(() => runtime.quoteSource);
+        expect(source).not.toBe('');
+
+        await input(page).press((await currentQuote(page))[0]);
+        await page.clock.runFor(61_000);
+        await expect(page.locator('#modal-source')).toHaveText(source);
+    });
+
+    test('the result dialog hides the source line for common words', async ({ page }) => {
+        await page.goto('/');
+        await page.evaluate(() => {
+            gameState.mode = 'words';
+        });
+        await page.locator('#reset-button').click();
+        await input(page).pressSequentially(await currentQuote(page));
+        await expect(page.locator('#result-modal')).toHaveClass(/show/);
+        await expect(page.locator('#modal-source')).toBeHidden();
+    });
 });

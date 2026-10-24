@@ -746,6 +746,13 @@ footer {
     display: none !important;
 }
 
+.modal-source {
+    margin: -1rem 0 1.5rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
 /* Chart Container */
 .chart-container {
     margin: 2rem 0;

@@ -23,6 +23,7 @@ const resultModal = document.getElementById('result-modal');
 const settingsModal = document.getElementById('settings-modal');
 const modalWpmElement = document.getElementById('modal-wpm');
 const modalAccuracyElement = document.getElementById('modal-accuracy');
+const modalSourceElement = document.getElementById('modal-source');
 const shareBtn = document.getElementById('share-btn');
 const playAgainBtn = document.getElementById('play-again-btn');
 const settingsBtn = document.getElementById('settings-btn');
@@ -37,51 +38,13 @@ const wordCountSettingGroup = document.getElementById('word-count-setting');
 const soundToggle = document.getElementById('sound-toggle-settings');
 const hardModeToggle = document.getElementById('hard-mode-toggle-settings');
 const ghostModeToggle = document.getElementById('ghost-mode-toggle');
+const punctuationToggle = document.getElementById('punctuation-toggle');
+const numbersToggle = document.getElementById('numbers-toggle');
 
 // Chart
 const chartContainer = document.querySelector('.chart-container');
 const chartCaption = document.getElementById('chart-caption');
 const progressChart = document.getElementById('progress-chart');
-
-// --- Word Source ---
-const QUOTES = {
-    general: [
-        'The quick brown fox jumps over the lazy dog.',
-        'Productivity is never an accident. It is always the result of a commitment to excellence, intelligent planning, and focused effort.',
-        'To be or not to be, that is the question.',
-        'All our dreams can come true, if we have the courage to pursue them.',
-        'It does not matter how slowly you go as long as you do not stop.',
-        'Success is not final, failure is not fatal: it is the courage to continue that counts.',
-        "Believe you can and you're halfway there.",
-        'The only way to do great work is to love what you do.',
-        'In the middle of every difficulty lies opportunity.',
-        'Happiness is not something ready made. It comes from your own actions.',
-    ],
-    technology: [
-        'Any sufficiently advanced technology is indistinguishable from magic.',
-        'The science of today is the technology of tomorrow.',
-        'Technology is best when it brings people together.',
-        'It has become appallingly obvious that our technology has exceeded our humanity.',
-        'The Web does not just connect machines, it connects people.',
-        'Innovation distinguishes between a leader and a follower.',
-        'First we build the tools, then they build us.',
-        "Code is like humor. When you have to explain it, it's bad.",
-        'Simplicity is the soul of efficiency.',
-        'Make it work, make it right, make it fast.',
-    ],
-    code: [
-        "function hello() { console.log('Hello World'); }",
-        'const sum = (a, b) => a + b;',
-        'if (input === expected) { return true; } else { return false; }',
-        "document.getElementById('root').innerHTML = '<div></div>';",
-        'for (let i = 0; i < array.length; i++) { process(array[i]); }',
-        "import React, { useState } from 'react';",
-        "git commit -m 'Initial commit'",
-        'border-radius: 8px; background-color: #f0f0f0;',
-        'SELECT * FROM users WHERE id = 1;',
-        'while (isAlive) { eat(); sleep(); code(); }',
-    ],
-};
 
 // --- Storage ---
 const STORAGE_KEYS = {
@@ -115,11 +78,15 @@ const DEFAULT_SETTINGS = {
     mode: 'time', // 'time' or 'words'
     duration: 60, // seconds, time mode
     wordCount: 10, // words mode
-    category: 'general',
+    category: 'common', // 'common' or a key of QUOTES (texts.js)
     isGhostEnabled: false,
     isHardMode: false,
     isSoundEnabled: true,
+    hasPunctuation: false, // common words only
+    hasNumbers: false, // common words only
 };
+
+const CATEGORIES = ['common', ...Object.keys(QUOTES)];
 
 function sanitizeSettings(saved) {
     const settings = { ...DEFAULT_SETTINGS };
@@ -127,10 +94,14 @@ function sanitizeSettings(saved) {
     if (saved.mode === 'words') settings.mode = 'words';
     if (DURATIONS.includes(saved.duration)) settings.duration = saved.duration;
     if (WORD_COUNTS.includes(saved.wordCount)) settings.wordCount = saved.wordCount;
-    if (Object.prototype.hasOwnProperty.call(QUOTES, saved.category)) {
-        settings.category = saved.category;
-    }
-    for (const flag of ['isGhostEnabled', 'isHardMode', 'isSoundEnabled']) {
+    if (CATEGORIES.includes(saved.category)) settings.category = saved.category;
+    for (const flag of [
+        'isGhostEnabled',
+        'isHardMode',
+        'isSoundEnabled',
+        'hasPunctuation',
+        'hasNumbers',
+    ]) {
         if (typeof saved[flag] === 'boolean') settings[flag] = saved[flag];
     }
     return settings;
@@ -146,6 +117,7 @@ const runtime = {
     interval: null,
     timer: 0, // seconds shown in the HUD
     quoteText: '', // text currently on screen
+    quoteSource: '', // attribution of the passage on screen, if known
     quoteBase: 0, // characters in quotes already completed this run (time mode)
     baseCorrect: 0, // correct characters in completed quotes
     baseTyped: 0, // typed characters in completed quotes
@@ -171,7 +143,12 @@ if (!bests || typeof bests !== 'object' || Array.isArray(bests)) bests = {};
 // Runs only compete with runs of the same mode, length, and category.
 function settingsKey() {
     const length = gameState.mode === 'time' ? `${gameState.duration}s` : `${gameState.wordCount}w`;
-    return `${gameState.mode}:${length}:${gameState.category}`;
+    let category = gameState.category;
+    if (category === 'common') {
+        if (gameState.hasPunctuation) category += '+punctuation';
+        if (gameState.hasNumbers) category += '+numbers';
+    }
+    return `${gameState.mode}:${length}:${category}`;
 }
 
 function currentBest() {
@@ -251,7 +228,10 @@ function playSound(type) {
     }
 }
 
-// --- Quote Selection ---
+// --- Text Selection ---
+// Words per passage when Common Words runs in time mode. A new passage is
+// loaded each time one is finished.
+const COMMON_CHUNK = 25;
 let lastQuoteIndex = -1;
 
 function pickQuote(categoryQuotes) {
@@ -263,20 +243,59 @@ function pickQuote(categoryQuotes) {
     return categoryQuotes[index];
 }
 
-function getQuoteText() {
-    const categoryQuotes = QUOTES[gameState.category] || QUOTES.general;
+// Random common words with no word twice in a row, plus optional
+// punctuation (capitalized sentences, commas, full stops) and numbers.
+function commonWords(count) {
+    const words = [];
+    let previous = '';
+    let sentenceStart = true;
+    for (let n = 0; n < count; n++) {
+        let word;
+        do {
+            word = COMMON_WORDS[Math.floor(Math.random() * COMMON_WORDS.length)];
+        } while (word === previous);
+        previous = word;
+
+        if (gameState.hasNumbers && Math.random() < 0.1) {
+            word = String(1 + Math.floor(Math.random() * 9999));
+        }
+        if (gameState.hasPunctuation) {
+            if (sentenceStart) word = word[0].toUpperCase() + word.slice(1);
+            sentenceStart = false;
+            const roll = Math.random();
+            if (n === count - 1 || roll < 0.1) {
+                word += roll < 0.02 ? '?' : '.';
+                sentenceStart = true;
+            } else if (roll < 0.2) {
+                word += ',';
+            }
+        }
+        words.push(word);
+    }
+    return words.join(' ');
+}
+
+// Returns { text, source } for the next passage.
+function getPassage() {
+    if (gameState.category === 'common') {
+        const count = gameState.mode === 'words' ? gameState.wordCount : COMMON_CHUNK;
+        return { text: commonWords(count), source: '' };
+    }
+    const categoryQuotes = QUOTES[gameState.category];
     if (gameState.mode === 'words') {
         const words = [];
         while (words.length < gameState.wordCount) {
-            words.push(...pickQuote(categoryQuotes).split(' '));
+            words.push(...pickQuote(categoryQuotes).text.split(' '));
         }
-        return words.slice(0, gameState.wordCount).join(' ');
+        return { text: words.slice(0, gameState.wordCount).join(' '), source: '' };
     }
     return pickQuote(categoryQuotes);
 }
 
 function renderNewQuote() {
-    runtime.quoteText = getQuoteText();
+    const passage = getPassage();
+    runtime.quoteText = passage.text;
+    runtime.quoteSource = passage.source;
     quoteDisplayElement.textContent = '';
     quoteTextElement.textContent = runtime.quoteText;
 
@@ -582,6 +601,8 @@ function focusInDialog(element) {
 function showResultModal(wpm, accuracy) {
     modalWpmElement.textContent = wpm;
     modalAccuracyElement.textContent = `${accuracy}%`;
+    modalSourceElement.textContent = runtime.quoteSource;
+    modalSourceElement.classList.toggle('hidden', !runtime.quoteSource);
     resultModal.classList.add('show');
     updateFocusHint();
     focusInDialog(playAgainBtn);
@@ -649,6 +670,8 @@ function applySettingsToUI() {
     soundToggle.checked = gameState.isSoundEnabled;
     hardModeToggle.checked = gameState.isHardMode;
     ghostModeToggle.checked = gameState.isGhostEnabled;
+    punctuationToggle.checked = gameState.hasPunctuation;
+    numbersToggle.checked = gameState.hasNumbers;
     quoteDisplayElement.classList.toggle('blurred', gameState.isHardMode);
 }
 
@@ -827,6 +850,12 @@ function init() {
     });
     ghostModeToggle.addEventListener('change', (e) => {
         gameState.isGhostEnabled = e.target.checked;
+    });
+    punctuationToggle.addEventListener('change', (e) => {
+        gameState.hasPunctuation = e.target.checked;
+    });
+    numbersToggle.addEventListener('change', (e) => {
+        gameState.hasNumbers = e.target.checked;
     });
 
     shareBtn.addEventListener('click', shareResult);
