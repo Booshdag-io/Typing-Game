@@ -29,6 +29,28 @@
         <div class="background-glow"></div>
         <div class="container">
             <header>
+                <button
+                    id="stats-btn"
+                    class="icon-btn left"
+                    title="Stats"
+                    aria-label="Stats"
+                    aria-haspopup="dialog"
+                >
+                    <svg
+                        width="24"
+                        height="24"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                    >
+                        <path d="M3 3v18h18"></path>
+                        <path d="M7 15l4-4 3 3 5-6"></path>
+                    </svg>
+                </button>
                 <h1>TYPE<span class="accent">SPEED</span></h1>
                 <button
                     id="settings-btn"
@@ -356,6 +378,55 @@
 
                 <div class="modal-actions">
                     <button id="close-settings-btn" class="action-btn primary">Done</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stats Modal -->
+        <div
+            id="stats-modal"
+            class="modal-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="stats-title"
+        >
+            <div class="modal-content stats-content">
+                <h2 id="stats-title">Stats</h2>
+                <p id="stats-summary" class="stats-summary"></p>
+
+                <h3 class="stats-heading">Best per setting</h3>
+                <table class="stats-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Setting</th>
+                            <th scope="col">Best WPM</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stats-bests"></tbody>
+                </table>
+
+                <h3 class="stats-heading">Recent runs</h3>
+                <div class="stats-scroll">
+                    <table class="stats-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Date</th>
+                                <th scope="col">Setting</th>
+                                <th scope="col">WPM</th>
+                                <th scope="col">Accuracy</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stats-runs"></tbody>
+                    </table>
+                </div>
+
+                <p id="stats-status" class="stats-status" role="status"></p>
+                <input type="file" id="import-input" accept="application/json,.json" hidden />
+                <div class="modal-actions">
+                    <button id="export-btn" class="action-btn secondary">Export</button>
+                    <button id="import-btn" class="action-btn secondary">Import</button>
+                    <button id="clear-btn" class="action-btn secondary">Clear data</button>
+                    <button id="close-stats-btn" class="action-btn primary">Done</button>
                 </div>
             </div>
         </div>

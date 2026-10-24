@@ -30,6 +30,7 @@ Open `index.html` in a browser, or serve the folder with any static file server.
 - **Hard Mode**: blurs the characters you have already typed, so you cannot see your mistakes. The text ahead stays readable.
 - **Ghost Mode**: records the timing of your best run and replays its position as a second cursor while you type.
 - **Results**: a modal with your WPM and accuracy; raw WPM (all typed characters, right or wrong); correct and wrong character counts; elapsed time; whether the run set a new best for its settings, and the previous best; the keys you missed most in this run; a line chart of WPM at the end of each second of the run; a line chart of your last ten runs at the current settings once you have two or more; a Share button; and, once you have missed letters often enough, a button that starts a Weak Keys run. The shared text has the WPM, accuracy, settings, and a link to the site. On touch devices it opens the system share sheet; elsewhere it copies to the clipboard.
+- **Stats**: a dialog, opened from the chart icon in the header, with your best WPM for every setting you have played, the average of your last ten runs, and a list of recorded runs. Export saves everything in `localStorage` to a JSON file, Import loads such a file and replaces the stored data, and Clear data (two clicks) removes history, bests, and key stats.
 - **Sound**: short tones made with the Web Audio API for keypress, mistake, and completion. Can be turned off.
 - **Keyboard**: Tab restarts while you are typing. Escape closes a dialog. Opening Settings during a run abandons the run.
 - **Focus**: if the typing input loses focus, a hint appears over the text. Pressing a letter key moves focus back to the input.
@@ -45,7 +46,7 @@ Everything is stored in `localStorage` under these keys:
 | Key                  | Contents                                                                     |
 | -------------------- | ---------------------------------------------------------------------------- |
 | `typingGameSettings` | mode, duration, word count, category, and the feature toggles                |
-| `typingGameHistory`  | last 50 runs as `{wpm, accuracy, date, mode, key}`                           |
+| `typingGameHistory`  | last 500 runs as `{wpm, accuracy, date, mode, key}`                          |
 | `typingGameBests`    | best WPM and its keystroke timings for each settings key, used by Ghost Mode |
 | `typingGameKeyStats` | attempts and misses for each expected character across recorded runs         |
 

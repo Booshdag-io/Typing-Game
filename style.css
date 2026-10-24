@@ -173,6 +173,11 @@ header h1 .accent {
     justify-content: center;
 }
 
+.icon-btn.left {
+    left: 0;
+    right: auto;
+}
+
 .icon-btn:hover {
     color: var(--text-main);
     transform: rotate(45deg);
@@ -688,6 +693,61 @@ footer {
 .action-btn.secondary:hover {
     border-color: var(--text-main);
     background: rgba(255, 255, 255, 0.05);
+}
+
+/* Stats Modal */
+.stats-content {
+    text-align: left;
+    max-width: 640px;
+}
+
+.stats-summary {
+    margin: -0.75rem 0 1rem;
+    color: var(--text-muted);
+}
+
+.stats-heading {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 1rem 0 0.5rem;
+}
+
+.stats-scroll {
+    max-height: 14rem;
+    overflow-y: auto;
+}
+
+.stats-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.stats-table th {
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-muted);
+    padding: 0.25rem 0.5rem;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.stats-table td {
+    padding: 0.3rem 0.5rem;
+    color: var(--text-main);
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.stats-table td.num {
+    font-family: var(--font-code);
+}
+
+.stats-status {
+    min-height: 1.25rem;
+    margin: 1rem 0 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
 }
 
 /* Settings Modal Specifics */

@@ -38,6 +38,19 @@ const playAgainBtn = document.getElementById('play-again-btn');
 const settingsBtn = document.getElementById('settings-btn');
 const closeSettingsBtn = document.getElementById('close-settings-btn');
 
+// Stats dialog
+const statsModal = document.getElementById('stats-modal');
+const statsBtn = document.getElementById('stats-btn');
+const statsSummary = document.getElementById('stats-summary');
+const statsBestsBody = document.getElementById('stats-bests');
+const statsRunsBody = document.getElementById('stats-runs');
+const statsStatus = document.getElementById('stats-status');
+const exportBtn = document.getElementById('export-btn');
+const importBtn = document.getElementById('import-btn');
+const importInput = document.getElementById('import-input');
+const clearBtn = document.getElementById('clear-btn');
+const closeStatsBtn = document.getElementById('close-stats-btn');
+
 // Settings inputs
 const modeSelector = document.getElementById('mode-selector');
 const durationSelector = document.getElementById('duration-selector');
@@ -148,7 +161,7 @@ const runtime = {
     ghostTimeouts: [],
 };
 
-const HISTORY_LIMIT = 50;
+const HISTORY_LIMIT = 500;
 const CHART_POINTS = 10;
 
 let runHistory = loadJSON(STORAGE_KEYS.history, []);
@@ -681,6 +694,7 @@ function resetGame() {
     typingInputElement.disabled = false;
     resultModal.classList.remove('show');
     settingsModal.classList.remove('show');
+    statsModal.classList.remove('show');
 
     updateQuickBar();
     updateHighScoreDisplay();
@@ -874,6 +888,188 @@ function handleQuickPillClick(e, group) {
     resetGame();
 }
 
+// --- Stats ---
+// "time:60s:common+punctuation" -> "60s, Common Words, punctuation"
+function describeKey(key) {
+    const [mode, length, category = ''] = String(key).split(':');
+    const [base, ...extras] = category.split('+');
+    const option = categorySelect.querySelector(`option[value="${CSS.escape(base)}"]`);
+    const lengthLabel = mode === 'words' ? `${parseInt(length, 10)} words` : length;
+    return [lengthLabel, option ? option.textContent : base, ...extras].join(', ');
+}
+
+function tableRow(cells) {
+    const row = document.createElement('tr');
+    for (const text of cells) {
+        const cell = document.createElement('td');
+        cell.textContent = text;
+        if (/^\d+%?$/.test(String(text))) cell.className = 'num';
+        row.appendChild(cell);
+    }
+    return row;
+}
+
+function renderStats() {
+    const recent = runHistory.slice(0, 10);
+    statsSummary.textContent = recent.length
+        ? `${runHistory.length} recorded ${runHistory.length === 1 ? 'run' : 'runs'}. Average of the last ${recent.length}: ${Math.round(recent.reduce((sum, run) => sum + run.wpm, 0) / recent.length)} WPM.`
+        : 'No recorded runs yet.';
+
+    statsBestsBody.textContent = '';
+    Object.entries(bests)
+        .filter(([, best]) => best && typeof best.wpm === 'number')
+        .sort(([, a], [, b]) => b.wpm - a.wpm)
+        .forEach(([key, best]) =>
+            statsBestsBody.appendChild(tableRow([describeKey(key), best.wpm]))
+        );
+
+    statsRunsBody.textContent = '';
+    runHistory.forEach((run) => {
+        const date = new Date(run.date);
+        const when = isNaN(date)
+            ? ''
+            : date.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+        statsRunsBody.appendChild(
+            tableRow([when, describeKey(run.key), run.wpm, `${run.accuracy}%`])
+        );
+    });
+}
+
+// Like Settings, the dialog abandons a run in progress.
+function openStats() {
+    if (runtime.isStarted) resetGame();
+    typingInputElement.blur();
+    statsStatus.textContent = '';
+    clearBtn.textContent = 'Clear data';
+    renderStats();
+    statsModal.classList.add('show');
+    updateFocusHint();
+    focusInDialog(closeStatsBtn);
+}
+
+function closeStats() {
+    statsModal.classList.remove('show');
+    resetGame();
+}
+
+function exportData() {
+    const data = {
+        app: 'TypeSpeed',
+        version: 1,
+        exported: new Date().toISOString(),
+        [STORAGE_KEYS.settings]: gameState,
+        [STORAGE_KEYS.history]: runHistory,
+        [STORAGE_KEYS.bests]: bests,
+        [STORAGE_KEYS.keyStats]: keyStats,
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'typespeed-data.json';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    statsStatus.textContent = 'Exported typespeed-data.json.';
+}
+
+const isNumber = (value) => typeof value === 'number' && Number.isFinite(value);
+
+function validHistory(list) {
+    if (!Array.isArray(list)) return [];
+    return list
+        .filter(
+            (run) =>
+                run && isNumber(run.wpm) && isNumber(run.accuracy) && typeof run.key === 'string'
+        )
+        .map((run) => ({
+            wpm: run.wpm,
+            accuracy: run.accuracy,
+            date: typeof run.date === 'string' ? run.date : '',
+            mode: run.mode === 'words' ? 'words' : 'time',
+            key: run.key,
+        }))
+        .slice(0, HISTORY_LIMIT);
+}
+
+function validBests(map) {
+    const result = {};
+    if (!map || typeof map !== 'object' || Array.isArray(map)) return result;
+    for (const [key, best] of Object.entries(map)) {
+        if (!best || !isNumber(best.wpm) || !Array.isArray(best.keystrokes)) continue;
+        const keystrokes = best.keystrokes.filter((s) => s && isNumber(s.t) && isNumber(s.i));
+        result[key] = { ...best, wpm: best.wpm, keystrokes };
+    }
+    return result;
+}
+
+function validKeyStats(map) {
+    const result = {};
+    if (!map || typeof map !== 'object' || Array.isArray(map)) return result;
+    for (const [key, stat] of Object.entries(map)) {
+        if (stat && isNumber(stat.attempts) && isNumber(stat.misses)) {
+            result[key] = { attempts: stat.attempts, misses: stat.misses };
+        }
+    }
+    return result;
+}
+
+// Replaces the stored data with a file from Export. Anything malformed is
+// dropped rather than trusted.
+async function importData(file) {
+    let text;
+    try {
+        text = await file.text();
+    } catch {
+        statsStatus.textContent = 'Could not read that file.';
+        return;
+    }
+    let data;
+    try {
+        data = JSON.parse(text);
+    } catch {
+        statsStatus.textContent = 'That file is not valid JSON.';
+        return;
+    }
+    if (!data || data.app !== 'TypeSpeed') {
+        statsStatus.textContent = 'That file is not a TypeSpeed export.';
+        return;
+    }
+    runHistory = validHistory(data[STORAGE_KEYS.history]);
+    bests = validBests(data[STORAGE_KEYS.bests]);
+    keyStats = validKeyStats(data[STORAGE_KEYS.keyStats]);
+    Object.assign(gameState, sanitizeSettings(data[STORAGE_KEYS.settings]));
+    saveJSON(STORAGE_KEYS.history, runHistory);
+    saveJSON(STORAGE_KEYS.bests, bests);
+    saveJSON(STORAGE_KEYS.keyStats, keyStats);
+    saveSettings();
+    applySettingsToUI();
+    updateHighScoreDisplay();
+    renderStats();
+    statsStatus.textContent = `Imported ${runHistory.length} ${runHistory.length === 1 ? 'run' : 'runs'} and ${Object.keys(bests).length} best scores.`;
+}
+
+// Two clicks: the first asks, the second clears.
+function clearData() {
+    if (clearBtn.textContent !== 'Click again to clear') {
+        clearBtn.textContent = 'Click again to clear';
+        statsStatus.textContent = 'This removes run history, best scores, and key stats.';
+        return;
+    }
+    runHistory = [];
+    bests = {};
+    keyStats = {};
+    for (const key of [STORAGE_KEYS.history, STORAGE_KEYS.bests, STORAGE_KEYS.keyStats]) {
+        try {
+            localStorage.removeItem(key);
+        } catch {
+            // Storage unavailable; the in-memory copies are already empty.
+        }
+    }
+    clearBtn.textContent = 'Clear data';
+    statsStatus.textContent = 'Cleared.';
+    updateHighScoreDisplay();
+    renderStats();
+}
+
 // --- Keyboard ---
 // Keys that would move the caret or select text inside the input. Typing
 // always happens at the end of the value.
@@ -916,6 +1112,10 @@ function isModalOpen(modal) {
     return modal.classList.contains('show');
 }
 
+function openModal() {
+    return [settingsModal, statsModal, resultModal].find(isModalOpen) || null;
+}
+
 // Keep Tab and Shift+Tab inside the open dialog.
 function trapFocus(e, modal) {
     const focusable = Array.from(
@@ -939,10 +1139,7 @@ function trapFocus(e, modal) {
 // Show the "press any key" hint while nothing would receive typing. Runs
 // after focus has settled, so opening a dialog does not flash it.
 function updateFocusHint() {
-    const lost =
-        document.activeElement !== typingInputElement &&
-        !isModalOpen(settingsModal) &&
-        !isModalOpen(resultModal);
+    const lost = document.activeElement !== typingInputElement && !openModal();
     typingContainer.classList.toggle('unfocused', lost);
 }
 
@@ -958,22 +1155,20 @@ function refocusOnType(e) {
 }
 
 function handleKeydown(e) {
+    const modal = openModal();
     if (e.key === 'Escape') {
-        if (isModalOpen(settingsModal)) closeSettings();
-        else if (isModalOpen(resultModal)) resetGame();
+        if (modal === settingsModal) closeSettings();
+        else if (modal === statsModal) closeStats();
+        else if (modal === resultModal) resetGame();
         return;
     }
-    if (e.key === 'Tab' && isModalOpen(settingsModal)) {
-        trapFocus(e, settingsModal);
-        return;
-    }
-    if (e.key === 'Tab' && isModalOpen(resultModal)) {
-        trapFocus(e, resultModal);
+    if (e.key === 'Tab' && modal) {
+        trapFocus(e, modal);
         return;
     }
 
     if (e.key !== 'Tab') {
-        if (!isModalOpen(settingsModal) && !isModalOpen(resultModal)) refocusOnType(e);
+        if (!modal) refocusOnType(e);
         return;
     }
 
@@ -1002,6 +1197,17 @@ function init() {
     resetButton.addEventListener('click', resetGame);
 
     settingsBtn.addEventListener('click', openSettings);
+    statsBtn.addEventListener('click', openStats);
+    closeStatsBtn.addEventListener('click', closeStats);
+    exportBtn.addEventListener('click', exportData);
+    importBtn.addEventListener('click', () => importInput.click());
+    // Cleared after the import finishes, so picking the same file again
+    // still fires change.
+    importInput.addEventListener('change', async () => {
+        if (importInput.files[0]) await importData(importInput.files[0]);
+        importInput.value = '';
+    });
+    clearBtn.addEventListener('click', clearData);
     closeSettingsBtn.addEventListener('click', closeSettings);
     modeSelector.addEventListener('click', (e) => handlePillClick(e, 'mode'));
     durationSelector.addEventListener('click', (e) => handlePillClick(e, 'duration'));

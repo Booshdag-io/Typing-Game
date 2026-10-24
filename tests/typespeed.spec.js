@@ -5,6 +5,7 @@
 
 const { test, expect } = require('@playwright/test');
 const { default: AxeBuilder } = require('@axe-core/playwright');
+const fs = require('node:fs');
 
 const input = (page) => page.locator('#typing-input');
 const currentQuote = (page) => page.evaluate(() => runtime.quoteText);
@@ -539,6 +540,11 @@ test.describe('accessibility', () => {
         await input(page).pressSequentially(await currentQuote(page));
         await expect(page.locator('#result-modal')).toHaveClass(/show/);
         expect(await contrastViolations(page)).toEqual([]);
+
+        await page.keyboard.press('Escape');
+        await page.locator('#stats-btn').click();
+        await expect(page.locator('#stats-modal')).toHaveClass(/show/);
+        expect(await contrastViolations(page)).toEqual([]);
     });
 
     test('screen readers get the passage, pill state, and result values', async ({ page }) => {
@@ -992,7 +998,7 @@ test.describe('weak keys', () => {
                     k: { attempts: 10, misses: 5 },
                     v: { attempts: 10, misses: 4 },
                     e: { attempts: 100, misses: 1 },
-                    w: { attempts: 2, misses: 2 }, // too few attempts to count
+                    q: { attempts: 2, misses: 2 }, // too few attempts; no common word has q
                     ';': { attempts: 10, misses: 9 }, // not a letter
                 })
             );
@@ -1018,5 +1024,155 @@ test.describe('weak keys', () => {
         await input(page).pressSequentially(await currentQuote(page), { delay: 40 });
         await expect(page.locator('#modal-keys')).toHaveText('No missed keys.');
         await expect(page.locator('#practice-btn')).toBeHidden();
+    });
+});
+
+test.describe('stats dialog', () => {
+    // Files are passed as buffers: WebKit on Windows cannot read files that
+    // tests pick from a drive other than the system drive.
+    const jsonFile = (name, text) => ({
+        name,
+        mimeType: 'application/json',
+        buffer: Buffer.from(text),
+    });
+
+    const seed = () => {
+        localStorage.setItem(
+            'typingGameHistory',
+            JSON.stringify([
+                {
+                    wpm: 60,
+                    accuracy: 98,
+                    date: '2026-01-02T10:00:00Z',
+                    mode: 'time',
+                    key: 'time:60s:common',
+                },
+                {
+                    wpm: 40,
+                    accuracy: 95,
+                    date: '2026-01-01T10:00:00Z',
+                    mode: 'words',
+                    key: 'words:25w:code',
+                },
+            ])
+        );
+        localStorage.setItem(
+            'typingGameBests',
+            JSON.stringify({
+                'time:60s:common': { wpm: 60, keystrokes: [{ t: 100, i: 1 }] },
+                'words:25w:code': { wpm: 40, keystrokes: [] },
+            })
+        );
+        localStorage.setItem(
+            'typingGameKeyStats',
+            JSON.stringify({ k: { attempts: 9, misses: 3 } })
+        );
+    };
+
+    test('opens by keyboard, lists bests and runs, traps Tab, and closes on Escape', async ({
+        page,
+    }) => {
+        await page.addInitScript(seed);
+        await page.goto('/');
+        await page.locator('#stats-btn').focus();
+        await page.keyboard.press('Enter');
+
+        const dialog = page.locator('#stats-modal');
+        await expect(dialog).toHaveClass(/show/);
+        await expect(page.locator('#close-stats-btn')).toBeFocused();
+        await expect(page.locator('#stats-summary')).toHaveText(
+            '2 recorded runs. Average of the last 2: 50 WPM.'
+        );
+        await expect(page.locator('#stats-bests tr')).toHaveCount(2);
+        await expect(page.locator('#stats-bests tr').first()).toHaveText(/60s, Common Words\s*60/);
+        await expect(page.locator('#stats-runs tr')).toHaveCount(2);
+        await expect(page.locator('#stats-runs tr').nth(1)).toContainText(
+            '25 words, Code Snippets'
+        );
+
+        // Done is last, so Tab wraps to Export.
+        await page.keyboard.press('Tab');
+        await expect(page.locator('#export-btn')).toBeFocused();
+        await page.keyboard.press('Shift+Tab');
+        await expect(page.locator('#close-stats-btn')).toBeFocused();
+
+        await page.keyboard.press('a');
+        expect(await page.evaluate(() => runtime.isStarted)).toBe(false);
+
+        await page.keyboard.press('Escape');
+        await expect(dialog).not.toHaveClass(/show/);
+        await expect(input(page)).toBeFocused();
+    });
+
+    test('export then import restores the data in a fresh browser', async ({ page, browser }) => {
+        await page.addInitScript(seed);
+        await page.goto('/');
+        await page.locator('#stats-btn').click();
+        const [download] = await Promise.all([
+            page.waitForEvent('download'),
+            page.locator('#export-btn').click(),
+        ]);
+        expect(download.suggestedFilename()).toBe('typespeed-data.json');
+        const saved = test.info().outputPath('typespeed-data.json');
+        await download.saveAs(saved);
+        const file = jsonFile('typespeed-data.json', fs.readFileSync(saved, 'utf8'));
+
+        const fresh = await browser.newContext();
+        const other = await fresh.newPage();
+        await other.goto('/');
+        await expect(other.locator('#high-score')).toHaveText('0');
+        await other.locator('#stats-btn').click();
+        await other.locator('#import-input').setInputFiles(file);
+        await expect(other.locator('#stats-status')).toHaveText(
+            'Imported 2 runs and 2 best scores.'
+        );
+        await expect(other.locator('#stats-bests tr')).toHaveCount(2);
+
+        const stored = await other.evaluate(() => ({
+            bests: JSON.parse(localStorage.getItem('typingGameBests')),
+            keyStats: JSON.parse(localStorage.getItem('typingGameKeyStats')),
+        }));
+        expect(stored.bests['time:60s:common'].wpm).toBe(60);
+        expect(stored.keyStats).toEqual({ k: { attempts: 9, misses: 3 } });
+        await other.keyboard.press('Escape');
+        await expect(other.locator('#high-score')).toHaveText('60');
+        await fresh.close();
+    });
+
+    test('import rejects files that are not TypeSpeed exports', async ({ page }) => {
+        await page.addInitScript(seed);
+        await page.goto('/');
+        await page.locator('#stats-btn').click();
+        await page.locator('#import-input').setInputFiles(jsonFile('bad.json', '{oops'));
+        await expect(page.locator('#stats-status')).toHaveText('That file is not valid JSON.');
+
+        await page
+            .locator('#import-input')
+            .setInputFiles(jsonFile('other.json', JSON.stringify({ typingGameBests: {} })));
+        await expect(page.locator('#stats-status')).toHaveText(
+            'That file is not a TypeSpeed export.'
+        );
+        await expect(page.locator('#stats-bests tr')).toHaveCount(2);
+    });
+
+    test('clear data takes two clicks and removes history, bests, and key stats', async ({
+        page,
+    }) => {
+        await page.addInitScript(seed);
+        await page.goto('/');
+        await page.locator('#stats-btn').click();
+        await page.locator('#clear-btn').click();
+        await expect(page.locator('#clear-btn')).toHaveText('Click again to clear');
+        expect(await page.evaluate(() => localStorage.getItem('typingGameBests'))).not.toBeNull();
+
+        await page.locator('#clear-btn').click();
+        await expect(page.locator('#stats-summary')).toHaveText('No recorded runs yet.');
+        const stored = await page.evaluate(() =>
+            ['typingGameHistory', 'typingGameBests', 'typingGameKeyStats'].map((key) =>
+                localStorage.getItem(key)
+            )
+        );
+        expect(stored).toEqual([null, null, null]);
+        await expect(page.locator('#high-score')).toHaveText('0');
     });
 });
