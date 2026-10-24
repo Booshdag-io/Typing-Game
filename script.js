@@ -33,6 +33,8 @@ const modalTimeElement = document.getElementById('modal-time');
 const modalKeysElement = document.getElementById('modal-keys');
 const practiceBtn = document.getElementById('practice-btn');
 const practiceNote = document.getElementById('practice-note');
+const challengeBtn = document.getElementById('challenge-btn');
+const modalChallengeElement = document.getElementById('modal-challenge');
 const shareBtn = document.getElementById('share-btn');
 const playAgainBtn = document.getElementById('play-again-btn');
 const settingsBtn = document.getElementById('settings-btn');
@@ -163,6 +165,7 @@ const runtime = {
     random: Math.random, // seeded generator, replaced in resetGame
     weakKeys: [], // letters the Weak Keys category uses this run
     ghostIndex: 0, // character index the ghost has reached
+    challenge: null, // decoded challenge link, kept across resets until a run uses it
     ghostTimeouts: [],
 };
 
@@ -382,7 +385,7 @@ function renderNewQuote() {
     quoteDisplayElement.textContent = '';
     quoteTextElement.textContent = runtime.quoteText;
 
-    if (gameState.isGhostEnabled) {
+    if (gameState.isGhostEnabled || runtime.challenge) {
         const ghostCursor = document.createElement('div');
         ghostCursor.id = 'ghost-cursor';
         ghostCursor.className = 'ghost-cursor';
@@ -521,7 +524,12 @@ function startGame() {
     runtime.interval = setInterval(tick, 250);
 
     const best = currentBest();
-    if (gameState.isGhostEnabled && best) startGhostPlayback(best);
+    if (runtime.challenge) {
+        runtime.challenge.used = true;
+        startGhostPlayback({ keystrokes: runtime.challenge.strokes });
+    } else if (gameState.isGhostEnabled && best) {
+        startGhostPlayback(best);
+    }
     updateGhostStatus();
 }
 
@@ -565,12 +573,17 @@ function startGhostPlayback(best) {
 // Before a run: what the ghost is. During a run: how far ahead or behind
 // the ghost you are, in characters.
 function updateGhostStatus() {
-    if (!gameState.isGhostEnabled) {
+    const challenge = runtime.challenge;
+    if (!gameState.isGhostEnabled && !challenge) {
         ghostStatus.classList.add('hidden');
         return;
     }
     ghostStatus.classList.remove('hidden');
-    const best = currentBest();
+    const best = challenge || currentBest();
+    if (challenge && !runtime.isStarted) {
+        ghostStatus.textContent = `Challenge: beat ${challenge.wpm} WPM on this text`;
+        return;
+    }
     if (!best) {
         ghostStatus.textContent = 'No ghost yet for these settings: finish a run to record one.';
         return;
@@ -717,6 +730,7 @@ function renderRunChart() {
 }
 
 function resetGame() {
+    if (runtime.challenge && runtime.challenge.used) endChallenge();
     clearInterval(runtime.interval);
     stopGhostPlayback();
     Object.assign(runtime, {
@@ -739,7 +753,9 @@ function resetGame() {
     // With Ghost Mode on and a best that recorded its seed, replay the same
     // passages the best was typed on. Otherwise start from a new seed.
     const best = currentBest();
-    const replay = gameState.isGhostEnabled && best && Number.isInteger(best.seed) ? best : null;
+    const replay =
+        runtime.challenge ||
+        (gameState.isGhostEnabled && best && Number.isInteger(best.seed) ? best : null);
     runtime.seed = replay ? replay.seed : newSeed();
     runtime.random = seededRandom(runtime.seed);
     runtime.weakKeys = replay && Array.isArray(replay.weakKeys) ? replay.weakKeys : weakestKeys();
@@ -827,6 +843,16 @@ function showResultModal(wpm, accuracy, { isNewBest, previousBest }) {
         ? `Most missed keys: ${missed.join(', ')}`
         : 'No missed keys.';
     practiceBtn.classList.toggle('hidden', weakestKeys().length === 0);
+    challengeBtn.classList.toggle('hidden', elapsed < 1000);
+    challengeBtn.textContent = 'Copy challenge link';
+
+    const challenge = runtime.challenge;
+    modalChallengeElement.classList.toggle('hidden', !challenge);
+    if (challenge) {
+        const outcome =
+            wpm > challenge.wpm ? 'You won.' : wpm === challenge.wpm ? 'A tie.' : 'They won.';
+        modalChallengeElement.textContent = `Challenge: you ${wpm} WPM, them ${challenge.wpm} WPM. ${outcome}`;
+    }
     modalSourceElement.textContent = runtime.quoteSource;
     modalSourceElement.classList.toggle('hidden', !runtime.quoteSource);
     resultModal.classList.add('show');
@@ -872,8 +898,178 @@ async function shareResult() {
     }, 2000);
 }
 
+// --- Challenge Links ---
+// A link carries a finished run's settings, seed, WPM, and keystroke
+// timings in the URL hash. Opening it plays those passages with the run as
+// the ghost, without changing the receiver's saved settings.
+const CHALLENGE_VERSION = 1;
+const CHALLENGE_MAX_LENGTH = 20000; // characters in the hash
+const CHALLENGE_MAX_STROKES = 5000;
+const CHALLENGE_SETTINGS = [
+    'mode',
+    'duration',
+    'wordCount',
+    'category',
+    'hasPunctuation',
+    'hasNumbers',
+];
+
+function toBase64Url(bytes) {
+    let binary = '';
+    bytes.forEach((byte) => {
+        binary += String.fromCharCode(byte);
+    });
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function fromBase64Url(text) {
+    const binary = atob(text.replace(/-/g, '+').replace(/_/g, '/'));
+    return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+}
+
+// Runs bytes through a (de)compression stream. Reading the stream directly,
+// with the writer's rejections caught, keeps a corrupt link from logging
+// stream errors; the read rejects instead and the caller ignores the link.
+async function pipeBytes(bytes, stream) {
+    const writer = stream.writable.getWriter();
+    writer.write(bytes).catch(() => {});
+    writer.close().catch(() => {});
+    const reader = stream.readable.getReader();
+    const chunks = [];
+    let length = 0;
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        length += value.length;
+    }
+    const result = new Uint8Array(length);
+    let offset = 0;
+    for (const chunk of chunks) {
+        result.set(chunk, offset);
+        offset += chunk.length;
+    }
+    return result;
+}
+
+// 'z' + deflated JSON where CompressionStream exists, otherwise 'j' + JSON.
+async function encodeChallenge(payload) {
+    const json = new TextEncoder().encode(JSON.stringify(payload));
+    if (typeof CompressionStream === 'function') {
+        return `z${toBase64Url(await pipeBytes(json, new CompressionStream('deflate-raw')))}`;
+    }
+    return `j${toBase64Url(json)}`;
+}
+
+async function decodeChallenge(text) {
+    let bytes = fromBase64Url(text.slice(1));
+    if (text[0] === 'z') {
+        if (typeof DecompressionStream !== 'function') return null;
+        bytes = await pipeBytes(bytes, new DecompressionStream('deflate-raw'));
+    } else if (text[0] !== 'j') {
+        return null;
+    }
+    return JSON.parse(new TextDecoder().decode(bytes));
+}
+
+// Checks every field of a decoded payload. Returns null if anything is off.
+function parseChallenge(data) {
+    if (!data || data.v !== CHALLENGE_VERSION || !data.s || typeof data.s !== 'object') return null;
+    if (!Number.isInteger(data.seed) || data.seed < 0 || data.seed >= 4294967296) return null;
+    if (!isNumber(data.wpm) || data.wpm < 0 || data.wpm > 1000) return null;
+    if (!Array.isArray(data.d) || data.d.length % 2 !== 0) return null;
+    if (data.d.length > CHALLENGE_MAX_STROKES * 2 || !data.d.every(Number.isInteger)) return null;
+
+    const strokes = [];
+    let t = 0;
+    let i = 0;
+    for (let n = 0; n < data.d.length; n += 2) {
+        t += data.d[n];
+        i += data.d[n + 1];
+        if (data.d[n] < 0 || t > 600000 || i < 0 || i > 100000) return null;
+        strokes.push({ t, i });
+    }
+
+    const sanitized = sanitizeSettings(data.s);
+    const settings = {};
+    for (const name of CHALLENGE_SETTINGS) settings[name] = sanitized[name];
+    const weakKeys = Array.isArray(data.k)
+        ? data.k.filter((key) => /^[a-z]$/.test(key)).slice(0, WEAK_KEY_COUNT)
+        : [];
+    return { settings, seed: data.seed, wpm: Math.round(data.wpm), weakKeys, strokes, used: false };
+}
+
+function challengePayload() {
+    const deltas = [];
+    let t = 0;
+    let i = 0;
+    for (const stroke of runtime.ghostStrokes.slice(0, CHALLENGE_MAX_STROKES)) {
+        deltas.push(stroke.t - t, stroke.i - i);
+        t = stroke.t;
+        i = stroke.i;
+    }
+    const settings = {};
+    for (const name of CHALLENGE_SETTINGS) settings[name] = gameState[name];
+    return {
+        v: CHALLENGE_VERSION,
+        s: settings,
+        seed: runtime.seed,
+        wpm: Number(modalWpmElement.textContent),
+        k: gameState.category === 'weak' ? runtime.weakKeys : [],
+        d: deltas,
+    };
+}
+
+async function copyChallengeLink() {
+    try {
+        const code = await encodeChallenge(challengePayload());
+        const url = `${location.origin}${location.pathname}#c=${code}`;
+        await navigator.clipboard.writeText(url);
+        challengeBtn.textContent = 'Link copied';
+    } catch {
+        challengeBtn.textContent = 'Copy failed';
+    }
+}
+
+function clearChallengeHash() {
+    if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+}
+
+async function loadChallengeFromHash() {
+    const match = location.hash.match(/^#c=([A-Za-z0-9_-]+)$/);
+    if (!match || match[1].length > CHALLENGE_MAX_LENGTH) return;
+    let challenge;
+    try {
+        challenge = parseChallenge(await decodeChallenge(match[1]));
+    } catch {
+        challenge = null;
+    }
+    if (!challenge) {
+        clearChallengeHash();
+        return;
+    }
+    runtime.challenge = challenge;
+    Object.assign(gameState, challenge.settings);
+    applySettingsToUI();
+    resetGame();
+}
+
+// After a challenge run, go back to the receiver's own saved settings.
+function endChallenge() {
+    runtime.challenge = null;
+    Object.assign(gameState, sanitizeSettings(loadJSON(STORAGE_KEYS.settings, null)));
+    applySettingsToUI();
+    clearChallengeHash();
+}
+
 // --- Settings ---
+// Changing a setting by hand ends a challenge; the visible settings,
+// including the change, become the saved ones.
 function saveSettings() {
+    if (runtime.challenge) {
+        runtime.challenge = null;
+        clearChallengeHash();
+    }
     saveJSON(STORAGE_KEYS.settings, gameState);
 }
 
@@ -1317,9 +1513,12 @@ function init() {
         resetGame();
     });
 
+    challengeBtn.addEventListener('click', copyChallengeLink);
+
     document.addEventListener('keydown', handleKeydown);
 
     resetGame();
+    loadChallengeFromHash();
 }
 
 init();

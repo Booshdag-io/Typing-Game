@@ -1,7 +1,8 @@
 // End-to-end tests against the real page. page.evaluate callbacks run in the
 // browser, where script.js's top-level consts are in scope.
 /* global runtime, gameState, resultModal, typingInputElement, wpmElement, updateMetrics,
-   getPassage, settingsKey, COMMON_WORDS, QUOTES, renderNewQuote */
+   getPassage, settingsKey, COMMON_WORDS, QUOTES, renderNewQuote, parseChallenge,
+   decodeChallenge, encodeChallenge */
 
 const { test, expect } = require('@playwright/test');
 const { default: AxeBuilder } = require('@axe-core/playwright');
@@ -1257,5 +1258,111 @@ test.describe('ghost on the same passage', () => {
         await expect(page.locator('#ghost-status')).toHaveText('Level with the ghost');
         await input(page).pressSequentially(quote.slice(6, 9));
         await expect(page.locator('#ghost-status')).toHaveText('+3 chars vs ghost');
+    });
+});
+
+test.describe('challenge links', () => {
+    const recordClipboard = () => {
+        navigator.clipboard.writeText = async (text) => {
+            window.copiedText = text;
+        };
+    };
+
+    test("replay the sender's passage and ghost without changing saved settings", async ({
+        page,
+        browser,
+    }) => {
+        await page.addInitScript(recordClipboard);
+        await page.addInitScript(() => {
+            localStorage.setItem(
+                'typingGameSettings',
+                JSON.stringify({ mode: 'words', wordCount: 10, category: 'technology' })
+            );
+        });
+        await page.goto('/');
+        const sent = await currentQuote(page);
+        await input(page).pressSequentially(sent, { delay: 30 });
+        await page.locator('#challenge-btn').click();
+        await expect(page.locator('#challenge-btn')).toHaveText('Link copied');
+        const link = await page.evaluate(() => window.copiedText);
+        expect(link).toMatch(/^http:\/\/127\.0\.0\.1:8765\/#c=[zj][A-Za-z0-9_-]+$/);
+        const senderWpm = Number(await page.locator('#modal-wpm').textContent());
+
+        const fresh = await browser.newContext();
+        const other = await fresh.newPage();
+        const errors = collectErrors(other);
+        await other.goto(link);
+        await expect(other.locator('#ghost-status')).toHaveText(
+            `Challenge: beat ${senderWpm} WPM on this text`
+        );
+        expect(await currentQuote(other)).toBe(sent);
+        await expect(other.locator('#quick-mode .pill.active')).toHaveText('Words');
+        await expect(other.locator('#quick-word-count .pill.active')).toHaveText('10');
+        await expect(other.locator('#category-select')).toHaveValue('technology');
+        await expect(other.locator('#ghost-cursor')).toHaveCount(1);
+
+        await input(other).pressSequentially(sent, { delay: 30 });
+        await expect(other.locator('#modal-challenge')).toHaveText(
+            new RegExp(
+                `^Challenge: you \\d+ WPM, them ${senderWpm} WPM\\. (You won|A tie|They won)\\.$`
+            )
+        );
+        expect(await other.evaluate(() => localStorage.getItem('typingGameSettings'))).toBeNull();
+
+        // Play Again returns to the receiver's own settings and drops the hash.
+        await other.locator('#play-again-btn').click();
+        await expect(other.locator('#quick-mode .pill.active')).toHaveText('Time');
+        await expect(other.locator('#category-select')).toHaveValue('common');
+        expect(await other.evaluate(() => location.hash)).toBe('');
+        await expect(other.locator('#ghost-status')).toBeHidden();
+        expect(errors).toEqual([]);
+        await fresh.close();
+    });
+
+    test('malformed and oversized links fall back to a normal run', async ({ page }) => {
+        const errors = collectErrors(page);
+        for (const hash of [
+            '#c=zAAAA',
+            '#c=jeyJ2IjoxfQ', // {"v":1} with nothing else
+            '#c=q123',
+            `#c=j${'A'.repeat(20001)}`,
+        ]) {
+            await page.goto(`/${hash}`);
+            await expect(page.locator('#ghost-status')).toBeHidden();
+            expect(await page.evaluate(() => runtime.challenge)).toBeNull();
+            await expect(page.locator('#category-select')).toHaveValue('common');
+        }
+        expect(errors).toEqual([]);
+    });
+
+    test('encoding round-trips and validation rejects bad strokes', async ({ page }) => {
+        await page.goto('/');
+        const result = await page.evaluate(async () => {
+            const payload = {
+                v: 1,
+                s: { mode: 'time', duration: 30, category: 'code' },
+                seed: 42,
+                wpm: 55,
+                k: [],
+                d: [100, 1, 120, 1, 90, -1],
+            };
+            const decoded = parseChallenge(await decodeChallenge(await encodeChallenge(payload)));
+            const negativeTime = parseChallenge({ ...payload, d: [100, 1, -50, 1] });
+            const badSeed = parseChallenge({ ...payload, seed: -1 });
+            return { decoded, negativeTime, badSeed };
+        });
+        expect(result.decoded.seed).toBe(42);
+        expect(result.decoded.settings).toMatchObject({
+            mode: 'time',
+            duration: 30,
+            category: 'code',
+        });
+        expect(result.decoded.strokes).toEqual([
+            { t: 100, i: 1 },
+            { t: 220, i: 2 },
+            { t: 310, i: 1 },
+        ]);
+        expect(result.negativeTime).toBeNull();
+        expect(result.badSeed).toBeNull();
     });
 });

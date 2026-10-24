@@ -866,6 +866,12 @@ footer {
     color: var(--text-main);
 }
 
+.modal-challenge {
+    margin: -0.75rem 0 1.25rem;
+    font-weight: 600;
+    color: var(--accent-secondary);
+}
+
 .modal-keys {
     margin: -0.75rem 0 1.25rem;
     font-size: 0.85rem;
