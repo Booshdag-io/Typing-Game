@@ -2,7 +2,8 @@
 // browser, where script.js's top-level consts are in scope.
 /* global runtime, gameState, resultModal, typingInputElement, wpmElement, updateMetrics,
    getPassage, settingsKey, COMMON_WORDS, QUOTES, renderNewQuote, parseChallenge,
-   decodeChallenge, encodeChallenge, normalizeCustomText, CODE_SNIPPETS */
+   decodeChallenge, encodeChallenge, normalizeCustomText, CODE_SNIPPETS, playSound, playVoice,
+   getAudioContext, audio, SOUNDS */
 
 const { test, expect } = require('@playwright/test');
 const { default: AxeBuilder } = require('@axe-core/playwright');
@@ -626,27 +627,46 @@ test('hard mode blurs typed characters and leaves the rest readable', async ({ p
 test.describe('sound', () => {
     // Counts AudioContexts and tones without making noise.
     const stubAudio = () => {
-        window.audio = { contexts: 0, tones: 0 };
-        const param = {
-            setValueAtTime() {},
-            linearRampToValueAtTime() {},
-            exponentialRampToValueAtTime() {},
-        };
+        window.audioCalls = { contexts: 0, tones: 0, stopped: 0, rampTargets: [] };
+        const calls = window.audioCalls;
+        const param = () => ({
+            setValueAtTime(value) {
+                calls.rampTargets.push(value);
+            },
+            linearRampToValueAtTime(value) {
+                calls.rampTargets.push(value);
+            },
+            exponentialRampToValueAtTime(value) {
+                calls.rampTargets.push(value);
+            },
+        });
+        // Oscillators never end on their own here, so the voice cap is what
+        // limits how many stay alive.
         class FakeAudioContext {
             constructor() {
-                window.audio.contexts++;
+                calls.contexts++;
                 this.state = 'running';
                 this.currentTime = 0;
                 this.destination = {};
             }
             createOscillator() {
-                window.audio.tones++;
-                return { connect() {}, frequency: param, start() {}, stop() {} };
+                calls.tones++;
+                return {
+                    frequency: param(),
+                    connect() {},
+                    disconnect() {},
+                    start() {},
+                    stop() {
+                        calls.stopped++;
+                    },
+                };
             }
             createGain() {
-                return { connect() {}, gain: param };
+                return { gain: param(), connect() {}, disconnect() {} };
             }
-            resume() {}
+            resume() {
+                return Promise.resolve();
+            }
         }
         window.AudioContext = FakeAudioContext;
         window.webkitAudioContext = FakeAudioContext;
@@ -655,10 +675,17 @@ test.describe('sound', () => {
     test('creates the audio context on the first keystroke, not at load', async ({ page }) => {
         await page.addInitScript(stubAudio);
         await page.goto('/');
-        expect(await page.evaluate(() => window.audio)).toEqual({ contexts: 0, tones: 0 });
+        const counts = () =>
+            page.evaluate(() => ({
+                contexts: window.audioCalls.contexts,
+                tones: window.audioCalls.tones,
+            }));
+        expect(await counts()).toEqual({ contexts: 0, tones: 0 });
 
         await input(page).press((await currentQuote(page))[0]);
-        expect(await page.evaluate(() => window.audio)).toEqual({ contexts: 1, tones: 1 });
+        expect(await counts()).toEqual({ contexts: 1, tones: 1 });
+        await input(page).press((await currentQuote(page))[1]);
+        expect(await counts()).toEqual({ contexts: 1, tones: 2 });
     });
 
     test('plays nothing when turned off', async ({ page }) => {
@@ -668,7 +695,54 @@ test.describe('sound', () => {
         });
         await page.goto('/');
         await input(page).pressSequentially((await currentQuote(page)).slice(0, 5));
-        expect(await page.evaluate(() => window.audio)).toEqual({ contexts: 0, tones: 0 });
+        expect(
+            await page.evaluate(() => [window.audioCalls.contexts, window.audioCalls.tones])
+        ).toEqual([0, 0]);
+    });
+
+    test('caps live voices at 16 and stops the oldest', async ({ page }) => {
+        await page.addInitScript(stubAudio);
+        await page.goto('/');
+        const result = await page.evaluate(() => {
+            for (let n = 0; n < 100; n++) playSound('click');
+            return { live: audio.voices.length, stopped: window.audioCalls.stopped };
+        });
+        expect(result.live).toBe(16);
+        // Each voice calls stop() once when scheduled; 84 more were stopped early.
+        expect(result.stopped).toBe(100 + 84);
+    });
+
+    test('recipes compile to positive frequencies, durations, and ramp targets', async ({
+        page,
+    }) => {
+        await page.addInitScript(stubAudio);
+        await page.goto('/');
+        const result = await page.evaluate(() => {
+            const steps = Object.values(SOUNDS).flatMap((recipe) => recipe.steps || [recipe]);
+            const valid = steps.every((step) => step.freq > 0 && step.duration > 0);
+            // A recipe sliding to 0 Hz at volume 0 must not throw or ramp to 0.
+            getAudioContext();
+            window.audioCalls.rampTargets = [];
+            playVoice(audio.context, { freq: 440, toFreq: 0, volume: 0, duration: 0.1 }, 0);
+            return { valid, targets: window.audioCalls.rampTargets };
+        });
+        expect(result.valid).toBe(true);
+        expect(result.targets.length).toBeGreaterThan(0);
+        for (const value of result.targets) expect(value).toBeGreaterThan(0);
+    });
+
+    test('a missing or blocked AudioContext is skipped without errors', async ({ page }) => {
+        await page.addInitScript(() => {
+            window.AudioContext = function () {
+                throw new Error('blocked');
+            };
+            window.webkitAudioContext = undefined;
+        });
+        const errors = collectErrors(page);
+        await page.goto('/');
+        await input(page).pressSequentially((await currentQuote(page)).slice(0, 3));
+        expect(await page.evaluate(() => [audio.failed, runtime.typedChars])).toEqual([true, 3]);
+        expect(errors).toEqual([]);
     });
 });
 

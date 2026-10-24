@@ -261,73 +261,101 @@ function currentBest() {
 }
 
 // --- Audio ---
-// Created on first use so the browser does not warn about an AudioContext
-// started before any user gesture.
-let audioContext = null;
+// Each sound is a recipe: oscillator shape, start and end frequency,
+// duration, and volume. `steps` lists sub-recipes with start offsets in
+// seconds, for sounds made of several notes.
+const SOUNDS = {
+    click: { wave: 'sine', freq: 800, toFreq: 400, duration: 0.05, volume: 0.05, jitter: 0.03 },
+    error: {
+        wave: 'sawtooth',
+        freq: 100,
+        toFreq: 80,
+        slide: 'linear',
+        duration: 0.15,
+        volume: 0.08,
+    },
+    // C5, E5, G5, C6
+    success: {
+        steps: [523.25, 659.25, 783.99, 1046.5].map((freq, i) => ({
+            at: i * 0.1,
+            wave: 'sine',
+            freq,
+            duration: 0.5,
+            volume: 0.05,
+        })),
+    },
+};
+
+const MAX_VOICES = 16; // oldest voice is stopped beyond this
+const GAIN_FLOOR = 0.0001; // exponential ramps cannot reach 0
+
+// The context is created on the first sound, after a keystroke, so the
+// browser does not start it suspended. Every voice goes through one master
+// gain node. If Web Audio is missing or blocked, sounds are skipped.
+const audio = { context: null, master: null, failed: false, voices: [] };
 
 function getAudioContext() {
-    if (!audioContext) {
-        const Ctx = window.AudioContext || window.webkitAudioContext;
-        if (!Ctx) return null;
-        audioContext = new Ctx();
+    if (audio.failed) return null;
+    if (!audio.context) {
+        try {
+            const Ctx = window.AudioContext || window.webkitAudioContext;
+            audio.context = new Ctx();
+            audio.master = audio.context.createGain();
+            audio.master.connect(audio.context.destination);
+        } catch {
+            audio.failed = true;
+            audio.context = null;
+            return null;
+        }
     }
-    if (audioContext.state === 'suspended') audioContext.resume();
-    return audioContext;
+    if (audio.context.state === 'suspended') audio.context.resume().catch(() => {});
+    return audio.context;
 }
 
-function playTone(ctx, { type, startFreq, endFreq, ramp, gain, duration, at }) {
+function playVoice(ctx, recipe, at) {
+    while (audio.voices.length >= MAX_VOICES) audio.voices.shift().stop();
+
+    // A few percent of random pitch keeps repeated clicks from sounding identical.
+    const jitter = recipe.jitter ? 1 + (Math.random() * 2 - 1) * recipe.jitter : 1;
+    const duration = recipe.duration > 0 ? recipe.duration : 0.1;
     const osc = ctx.createOscillator();
-    const gainNode = ctx.createGain();
-    osc.connect(gainNode);
-    gainNode.connect(ctx.destination);
-    osc.type = type;
-    osc.frequency.setValueAtTime(startFreq, at);
-    if (endFreq !== undefined) {
-        if (ramp === 'linear') osc.frequency.linearRampToValueAtTime(endFreq, at + duration);
-        else osc.frequency.exponentialRampToValueAtTime(endFreq, at + duration);
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(audio.master);
+    osc.type = recipe.wave || 'square';
+    osc.frequency.setValueAtTime(Math.max(recipe.freq * jitter, 1), at);
+    if (recipe.toFreq !== undefined) {
+        const target = Math.max(recipe.toFreq * jitter, 1);
+        if (recipe.slide === 'linear') osc.frequency.linearRampToValueAtTime(target, at + duration);
+        else osc.frequency.exponentialRampToValueAtTime(target, at + duration);
     }
-    gainNode.gain.setValueAtTime(gain, at);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, at + duration);
+    gain.gain.setValueAtTime(Math.max(recipe.volume ?? 0.08, GAIN_FLOOR), at);
+    gain.gain.exponentialRampToValueAtTime(GAIN_FLOOR, at + duration);
     osc.start(at);
     osc.stop(at + duration);
+
+    audio.voices.push(osc);
+    osc.onended = () => {
+        osc.disconnect();
+        gain.disconnect();
+        const index = audio.voices.indexOf(osc);
+        if (index !== -1) audio.voices.splice(index, 1);
+    };
 }
 
-function playSound(type) {
+// Fire and forget: never throws, and returns before touching Web Audio when
+// sound is off.
+function playSound(name) {
     if (!gameState.isSoundEnabled) return;
+    const recipe = SOUNDS[name];
+    if (!recipe) return;
     const ctx = getAudioContext();
     if (!ctx) return;
-    const now = ctx.currentTime;
-
-    if (type === 'click') {
-        playTone(ctx, {
-            type: 'sine',
-            startFreq: 800,
-            endFreq: 400,
-            gain: 0.05,
-            duration: 0.05,
-            at: now,
-        });
-    } else if (type === 'error') {
-        playTone(ctx, {
-            type: 'sawtooth',
-            startFreq: 100,
-            endFreq: 80,
-            ramp: 'linear',
-            gain: 0.08,
-            duration: 0.15,
-            at: now,
-        });
-    } else if (type === 'success') {
-        // C5, E5, G5, C6
-        [523.25, 659.25, 783.99, 1046.5].forEach((note, i) => {
-            playTone(ctx, {
-                type: 'sine',
-                startFreq: note,
-                gain: 0.05,
-                duration: 0.5,
-                at: now + i * 0.1,
-            });
-        });
+    try {
+        const now = ctx.currentTime;
+        for (const step of recipe.steps || [recipe]) playVoice(ctx, step, now + (step.at || 0));
+    } catch {
+        // A failed sound must not interrupt typing.
     }
 }
 
