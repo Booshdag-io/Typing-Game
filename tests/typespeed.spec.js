@@ -579,6 +579,59 @@ test('ghost cursor lines up with its character while focus mode scales the text'
     expect(offset).toBeLessThan(1);
 });
 
+test.describe('ghost cursor on a different passage in Time mode', () => {
+    const withGhost = (keystrokes) => {
+        localStorage.setItem(
+            'typingGameBests',
+            JSON.stringify({ 'time:60s:common': { wpm: 40, keystrokes, seed: 11 } })
+        );
+        localStorage.setItem('typingGameSettings', JSON.stringify({ isGhostEnabled: true }));
+    };
+    const cursorState = (page) =>
+        page.evaluate(() => {
+            const cursor = document.getElementById('ghost-cursor');
+            const spans = document.querySelectorAll('#quote-display span');
+            const last = spans[spans.length - 1];
+            return {
+                opacity: getComputedStyle(cursor).opacity,
+                ahead: cursor.classList.contains('ahead'),
+                behind: cursor.classList.contains('behind'),
+                left: new DOMMatrix(cursor.style.transform).m41,
+                start: spans[0].offsetLeft,
+                end: last.offsetLeft + last.offsetWidth,
+            };
+        });
+
+    test('waits at the end of the passage with an arrow when the ghost is ahead', async ({
+        page,
+    }) => {
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        await page.clock.install();
+        await page.addInitScript(withGhost, [{ t: 500, i: 1000 }]);
+        await page.goto('/');
+        await input(page).press((await currentQuote(page))[0]);
+        await page.clock.runFor(600);
+        const state = await cursorState(page);
+        expect(state).toMatchObject({ opacity: '1', ahead: true, behind: false });
+        expect(state.left).toBe(state.end);
+    });
+
+    test('waits at the start of the next passage when the ghost is behind', async ({ page }) => {
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        await page.clock.install();
+        await page.addInitScript(withGhost, [
+            { t: 0, i: 3 },
+            { t: 50000, i: 4 },
+        ]);
+        await page.goto('/');
+        await input(page).pressSequentially(await currentQuote(page));
+        expect(await page.evaluate(() => runtime.quoteBase)).toBeGreaterThan(0);
+        const state = await cursorState(page);
+        expect(state).toMatchObject({ opacity: '1', ahead: false, behind: true });
+        expect(state.left).toBe(state.start);
+    });
+});
+
 test.describe('accessibility', () => {
     const contrastViolations = async (page) => {
         const results = await new AxeBuilder({ page }).withRules(['color-contrast']).analyze();

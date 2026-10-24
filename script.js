@@ -510,6 +510,8 @@ function renderNewQuote() {
 
     const firstSpan = quoteDisplayElement.querySelector('span');
     if (firstSpan) firstSpan.classList.add('current');
+    // A new passage mid-run: show where the ghost is relative to it.
+    if (runtime.isStarted && runtime.ghostTimeouts.length > 0) placeGhostCursor();
 
     typingInputElement.value = '';
     typingInputElement.maxLength = runtime.quoteText.length;
@@ -695,16 +697,29 @@ function startGhostPlayback(best) {
             // been replaced since playback started.
             runtime.ghostIndex = stroke.i;
             updateGhostStatus();
-            const cursor = document.getElementById('ghost-cursor');
-            const spans = quoteDisplayElement.querySelectorAll('span');
-            const targetSpan = spans[stroke.i - runtime.quoteBase];
-            if (!cursor || !targetSpan) return;
-            // offsetLeft/Top are layout coordinates inside .quote-display,
-            // so the focus-mode scale does not shift them.
-            cursor.style.transform = `translate(${targetSpan.offsetLeft}px, ${targetSpan.offsetTop}px)`;
-            cursor.style.opacity = 1;
+            placeGhostCursor();
         }, stroke.t)
     );
+}
+
+// Puts the ghost cursor on the character the ghost has reached. In Time
+// mode the ghost can be on a later or earlier passage; then the cursor
+// waits at the end or start of this one, with an arrow pointing the way.
+function placeGhostCursor() {
+    const cursor = document.getElementById('ghost-cursor');
+    const spans = quoteDisplayElement.querySelectorAll('span');
+    if (!cursor || spans.length === 0) return;
+    const index = runtime.ghostIndex - runtime.quoteBase;
+    const ahead = index >= spans.length;
+    const behind = index < 0;
+    const span = spans[Math.min(Math.max(index, 0), spans.length - 1)];
+    // offsetLeft/Top are layout coordinates inside .quote-display, so the
+    // focus-mode scale does not shift them.
+    const left = span.offsetLeft + (ahead ? span.offsetWidth : 0);
+    cursor.style.transform = `translate(${left}px, ${span.offsetTop}px)`;
+    cursor.style.opacity = 1;
+    cursor.classList.toggle('ahead', ahead);
+    cursor.classList.toggle('behind', behind);
 }
 
 // Before a run: what the ghost is. During a run: how far ahead or behind

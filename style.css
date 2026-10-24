@@ -596,6 +596,27 @@ input:checked + .toggle-custom::after {
     z-index: 5;
 }
 
+/* The ghost is on a later or earlier passage of a Time run. */
+.ghost-cursor.ahead::after,
+.ghost-cursor.behind::after {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.75rem;
+    line-height: 1;
+    color: var(--ghost-border);
+}
+
+.ghost-cursor.ahead::after {
+    content: '\2192';
+    left: 4px;
+}
+
+.ghost-cursor.behind::after {
+    content: '\2190';
+    right: 4px;
+}
+
 /* Button */
 .reset-btn {
     background: transparent;
