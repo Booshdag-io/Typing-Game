@@ -322,6 +322,36 @@ test.describe('best scores', () => {
         await expect(page.locator('#high-score')).toHaveText('0');
     });
 
+    test('are kept apart for Stop on error and Skip indentation', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem(
+                'typingGameSettings',
+                JSON.stringify({ mode: 'words', isStopOnError: true })
+            );
+        });
+        await page.goto('/');
+        await input(page).pressSequentially(await currentQuote(page), { delay: 40 });
+        await expect(page.locator('#result-modal')).toHaveClass(/show/);
+        const keys = await page.evaluate(() =>
+            Object.keys(JSON.parse(localStorage.getItem('typingGameBests')))
+        );
+        expect(keys).toEqual(['words:10w:common+stop']);
+
+        const codeKeys = await page.evaluate(() => {
+            Object.assign(gameState, { category: 'code', codeLanguage: 'go' });
+            const withStop = settingsKey();
+            gameState.isAutoIndent = false;
+            const noIndent = settingsKey();
+            gameState.isStopOnError = false;
+            return [withStop, noIndent, settingsKey()];
+        });
+        expect(codeKeys).toEqual([
+            'words:10w:code-go+stop',
+            'words:10w:code-go+noindent+stop',
+            'words:10w:code-go+noindent',
+        ]);
+    });
+
     test('runs under one second are shown but not recorded', async ({ page }) => {
         await page.addInitScript(() => {
             localStorage.setItem('typingGameSettings', JSON.stringify({ mode: 'words' }));
@@ -1123,6 +1153,25 @@ test.describe('weak keys', () => {
         expect(await page.evaluate(() => settingsKey())).toBe('words:10w:weak');
     });
 
+    test("with Ghost Mode on, says the letters are the best run's", async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem(
+                'typingGameSettings',
+                JSON.stringify({ category: 'weak', isGhostEnabled: true })
+            );
+            localStorage.setItem(
+                'typingGameBests',
+                JSON.stringify({
+                    'time:60s:weak': { wpm: 40, keystrokes: [], seed: 3, weakKeys: ['q', 'z'] },
+                })
+            );
+        });
+        await page.goto('/');
+        await expect(page.locator('#practice-note')).toHaveText(
+            "Practicing your best run's letters: q, z"
+        );
+    });
+
     test('hides the practice button until a letter has enough misses', async ({ page }) => {
         await page.addInitScript(() => {
             localStorage.setItem('typingGameSettings', JSON.stringify({ mode: 'words' }));
@@ -1508,6 +1557,41 @@ test.describe('challenge links', () => {
         );
         expect(await page.evaluate(() => [runtime.isStarted, runtime.seed])).toEqual([false, 99]);
         await expect(page.locator('#quick-mode .pill.active')).toHaveText('Words');
+    });
+
+    test("play under the sender's Stop on error and Skip indentation", async ({ page }) => {
+        await page.goto('/');
+        const code = await page.evaluate(() =>
+            encodeChallenge({
+                v: 1,
+                s: { mode: 'words', category: 'code', isStopOnError: true, isAutoIndent: false },
+                seed: 5,
+                wpm: 30,
+                k: [],
+                d: [100, 1],
+            })
+        );
+        await page.goto(`/#c=${code}`);
+        await expect(page.locator('#ghost-status')).toHaveText(
+            'Challenge: beat 30 WPM on this text'
+        );
+        expect(
+            await page.evaluate(() => [
+                gameState.isStopOnError,
+                gameState.isAutoIndent,
+                runtime.indent.some(Boolean),
+            ])
+        ).toEqual([true, false, false]);
+
+        // A wrong key does not advance the caret, as on the sender's side.
+        const quote = await currentQuote(page);
+        await input(page).press(quote[0] === 'x' ? 'y' : 'x');
+        await expect(input(page)).toHaveValue('');
+        await page.keyboard.press('Tab');
+        await page.locator('#reset-button').click();
+        expect(
+            await page.evaluate(() => [gameState.isStopOnError, gameState.isAutoIndent])
+        ).toEqual([false, true]);
     });
 
     test('malformed and oversized links fall back to a normal run', async ({ page }) => {

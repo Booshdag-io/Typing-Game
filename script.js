@@ -249,7 +249,8 @@ function passageCategory() {
     return gameState.category === 'custom' && !gameState.customText ? 'common' : gameState.category;
 }
 
-// Runs only compete with runs of the same mode, length, and category.
+// Runs only compete with runs of the same mode, length, category, and
+// rules. The defaults (Stop on error off, Skip indentation on) add nothing.
 function settingsKey() {
     const length = gameState.mode === 'time' ? `${gameState.duration}s` : `${gameState.wordCount}w`;
     let category = passageCategory();
@@ -259,6 +260,8 @@ function settingsKey() {
         if (gameState.hasPunctuation) category += '+punctuation';
         if (gameState.hasNumbers) category += '+numbers';
     }
+    if (category.startsWith('code-') && !gameState.isAutoIndent) category += '+noindent';
+    if (gameState.isStopOnError) category += '+stop';
     return `${gameState.mode}:${length}:${category}`;
 }
 
@@ -863,6 +866,15 @@ function renderRunChart() {
     runChartCaption.textContent = `WPM by second, all typed characters. Peak ${max} WPM.`;
 }
 
+// The run whose passages the next run replays: an open challenge, or with
+// Ghost Mode on, the best for these settings if it recorded its seed.
+// Otherwise runs start from a new seed.
+function replayedRun() {
+    const best = currentBest();
+    if (runtime.challenge) return runtime.challenge;
+    return gameState.isGhostEnabled && best && Number.isInteger(best.seed) ? best : null;
+}
+
 function resetGame() {
     if (runtime.challenge && runtime.challenge.used) endChallenge();
     clearInterval(runtime.interval);
@@ -885,12 +897,7 @@ function resetGame() {
         challengeUrl: '',
     });
 
-    // With Ghost Mode on and a best that recorded its seed, replay the same
-    // passages the best was typed on. Otherwise start from a new seed.
-    const best = currentBest();
-    const replay =
-        runtime.challenge ||
-        (gameState.isGhostEnabled && best && Number.isInteger(best.seed) ? best : null);
+    const replay = replayedRun();
     runtime.seed = replay ? replay.seed : newSeed();
     runtime.random = seededRandom(runtime.seed);
     runtime.weakKeys = replay && Array.isArray(replay.weakKeys) ? replay.weakKeys : weakestKeys();
@@ -931,10 +938,18 @@ function updateQuickBar() {
     if (noCustomText) {
         practiceNote.textContent =
             'No custom text yet. Add it in Settings; using common words until then.';
+    } else if (!weak.length) {
+        practiceNote.textContent = 'Not enough mistakes recorded yet. Using all common words.';
     } else {
-        practiceNote.textContent = weak.length
-            ? `Practicing: ${weak.join(', ')}`
-            : 'Not enough mistakes recorded yet. Using all common words.';
+        // A replayed run keeps the letters it was typed with.
+        const replay = replayedRun();
+        let label = 'Practicing';
+        if (replay && Array.isArray(replay.weakKeys)) {
+            label = runtime.challenge
+                ? "Practicing the challenge's letters"
+                : "Practicing your best run's letters";
+        }
+        practiceNote.textContent = `${label}: ${weak.join(', ')}`;
     }
 }
 
@@ -1058,8 +1073,9 @@ const CHALLENGE_SETTINGS = [
     'category',
     'hasPunctuation',
     'hasNumbers',
-
     'codeLanguage',
+    'isStopOnError',
+    'isAutoIndent',
 ];
 
 function toBase64Url(bytes) {
@@ -1359,6 +1375,8 @@ function handleQuickPillClick(e, group) {
 }
 
 // --- Stats ---
+const KEY_EXTRA_LABELS = { stop: 'stop on error', noindent: 'indentation typed' };
+
 // "time:60s:common+punctuation" -> "60s, Common Words, punctuation"
 function describeKey(key) {
     const [mode, length, category = ''] = String(key).split(':');
@@ -1371,7 +1389,8 @@ function describeKey(key) {
     const languageOption =
         language && codeLanguageSelect.querySelector(`option[value="${CSS.escape(language)}"]`);
     if (languageOption) label += ` (${languageOption.textContent})`;
-    return [lengthLabel, label, ...extras].join(', ');
+    const extraLabels = extras.map((extra) => KEY_EXTRA_LABELS[extra] || extra);
+    return [lengthLabel, label, ...extraLabels].join(', ');
 }
 
 function tableRow(cells) {

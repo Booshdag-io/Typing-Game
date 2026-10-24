@@ -58,7 +58,7 @@ Everything is stored in `localStorage` under these keys:
 | `typingGameBests`    | best WPM and its keystroke timings for each settings key, used by Ghost Mode |
 | `typingGameKeyStats` | attempts and misses for each expected character across recorded runs         |
 
-A settings key combines mode, length, and category, for example `time:60s:common` or `words:25w:code`. Common Words with punctuation or numbers adds them to the category, as in `time:30s:common+punctuation+numbers`. Best scores, Ghost Mode, and the chart only compare runs with the same key. Runs that finish in under a second are shown but not saved.
+A settings key combines mode, length, and category, for example `time:60s:common` or `words:25w:code-python`. Common Words with punctuation or numbers adds them to the category, as in `time:30s:common+punctuation+numbers`. Code Snippets with Skip indentation off adds `+noindent`, and Stop on error adds `+stop`. Best scores, Ghost Mode, and the chart only compare runs with the same key. Runs that finish in under a second are shown but not saved.
 
 ## Development
 
