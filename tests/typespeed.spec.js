@@ -28,7 +28,8 @@ test.describe('loading', () => {
         await expect(page).toHaveTitle('TypeSpeed');
         await expect(input(page)).toBeFocused();
         await expect(page.locator('#timer')).toHaveText('60');
-        await expect(page.locator('#mode-badge')).toHaveText('60s');
+        await expect(page.locator('#quick-duration .pill.active')).toHaveText('60s');
+        await expect(page.locator('#quick-word-count')).toBeHidden();
 
         const quote = await currentQuote(page);
         expect(quote.length).toBeGreaterThan(0);
@@ -198,8 +199,10 @@ test.describe('settings dialog', () => {
         await input(page).pressSequentially(quote.slice(0, 5));
 
         // Focus mode blocks clicks on the header, but the keyboard still reaches it.
-        await page.keyboard.press('Shift+Tab');
-        await page.keyboard.press('Shift+Tab');
+        for (let n = 0; n < 12; n++) {
+            await page.keyboard.press('Shift+Tab');
+            if (await page.evaluate(() => document.activeElement.id === 'settings-btn')) break;
+        }
         await expect(page.locator('#settings-btn')).toBeFocused();
         await page.keyboard.press('Enter');
         await expect(page.locator('#settings-modal')).toHaveClass(/show/);
@@ -224,7 +227,8 @@ test.describe('settings dialog', () => {
         await expect(page.locator('#timer-setting')).toBeHidden();
 
         await page.keyboard.press('Escape');
-        await expect(page.locator('#mode-badge')).toHaveText('10 words');
+        await expect(page.locator('#quick-mode .pill.active')).toHaveText('Words');
+        await expect(page.locator('#quick-word-count .pill.active')).toHaveText('10');
         await expect(page.locator('#timer')).toHaveText('0');
 
         const saved = await page.evaluate(() =>
@@ -260,7 +264,7 @@ test.describe('settings dialog', () => {
 
         // Settings survive a reload.
         await page.reload();
-        await expect(page.locator('#mode-badge')).toHaveText('10 words');
+        await expect(page.locator('#quick-mode .pill.active')).toHaveText('Words');
     });
 });
 
@@ -834,4 +838,32 @@ test.describe('practice options', () => {
         await press(false);
         await expect(page.locator('#caps-warning')).toBeHidden();
     });
+});
+
+test('mode and length can be changed from the main screen', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#quick-mode [data-value="words"]').click();
+    await expect(page.locator('#quick-word-count')).toBeVisible();
+    await expect(page.locator('#quick-duration')).toBeHidden();
+    await page.locator('#quick-word-count [data-value="25"]').click();
+
+    expect((await currentQuote(page)).split(' ')).toHaveLength(25);
+    await expect(input(page)).toBeFocused();
+    await expect(page.locator('#quick-word-count [data-value="25"]')).toHaveAttribute(
+        'aria-pressed',
+        'true'
+    );
+    expect(
+        await page.evaluate(() => JSON.parse(localStorage.getItem('typingGameSettings')))
+    ).toMatchObject({ mode: 'words', wordCount: 25 });
+
+    // The Settings dialog shows the same values.
+    await page.locator('#settings-btn').click();
+    await expect(page.locator('#word-count-selector .pill.active')).toHaveText('25');
+    await page.keyboard.press('Escape');
+
+    // Keyboard works too.
+    await page.locator('#quick-mode [data-value="time"]').focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#timer')).toHaveText('60');
 });

@@ -344,11 +344,6 @@ input:checked + .toggle-custom::after {
 }
 
 /* Badges */
-.mode-badges {
-    display: flex;
-    gap: 0.5rem;
-}
-
 .badge {
     font-size: 0.75rem;
     background: rgba(255, 255, 255, 0.1);
@@ -747,6 +742,16 @@ footer {
     color: var(--text-main);
     font-weight: 600;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.pill-selector.compact {
+    padding: 2px;
+}
+
+.pill-selector.compact .pill {
+    flex: none;
+    padding: 0.3rem 0.7rem;
+    font-size: 0.8rem;
 }
 
 .toggles-list {

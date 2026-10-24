@@ -15,7 +15,9 @@ const highScoreElement = document.getElementById('high-score');
 const resetButton = document.getElementById('reset-button');
 const containerElement = document.querySelector('.container');
 const categorySelect = document.getElementById('category-select');
-const modeBadge = document.getElementById('mode-badge');
+const quickMode = document.getElementById('quick-mode');
+const quickDuration = document.getElementById('quick-duration');
+const quickWordCount = document.getElementById('quick-word-count');
 const ghostBadge = document.getElementById('ghost-badge');
 
 // Modals
@@ -586,15 +588,19 @@ function resetGame() {
     resultModal.classList.remove('show');
     settingsModal.classList.remove('show');
 
-    updateBadges();
+    updateQuickBar();
     updateHighScoreDisplay();
     renderNewQuote();
     typingInputElement.focus();
 }
 
-function updateBadges() {
-    modeBadge.textContent =
-        gameState.mode === 'time' ? `${gameState.duration}s` : `${gameState.wordCount} words`;
+// The mode and length pills on the main screen mirror gameState.
+function updateQuickBar() {
+    setActivePill(quickMode, gameState.mode);
+    setActivePill(quickDuration, String(gameState.duration));
+    setActivePill(quickWordCount, String(gameState.wordCount));
+    quickDuration.classList.toggle('hidden', gameState.mode !== 'time');
+    quickWordCount.classList.toggle('hidden', gameState.mode !== 'words');
     ghostBadge.classList.toggle('hidden', !gameState.isGhostEnabled);
 }
 
@@ -708,21 +714,34 @@ function closeSettings() {
     resetGame();
 }
 
-function handlePillClick(e, group) {
-    const pill = e.target.closest('.pill');
-    if (!pill) return;
-    setActivePill(e.currentTarget, pill.dataset.value);
-
-    const value = pill.dataset.value;
+function applyPill(group, value) {
     if (group === 'mode') {
         gameState.mode = value === 'words' ? 'words' : 'time';
-        timerSettingGroup.classList.toggle('hidden', gameState.mode !== 'time');
-        wordCountSettingGroup.classList.toggle('hidden', gameState.mode !== 'words');
     } else if (group === 'duration') {
         gameState.duration = parseInt(value, 10);
     } else if (group === 'wordCount') {
         gameState.wordCount = parseInt(value, 10);
     }
+}
+
+function handlePillClick(e, group) {
+    const pill = e.target.closest('.pill');
+    if (!pill) return;
+    setActivePill(e.currentTarget, pill.dataset.value);
+    applyPill(group, pill.dataset.value);
+    timerSettingGroup.classList.toggle('hidden', gameState.mode !== 'time');
+    wordCountSettingGroup.classList.toggle('hidden', gameState.mode !== 'words');
+}
+
+// Main-screen pills change the setting and start a fresh run at once, like
+// the category select.
+function handleQuickPillClick(e, group) {
+    const pill = e.target.closest('.pill');
+    if (!pill) return;
+    applyPill(group, pill.dataset.value);
+    saveSettings();
+    applySettingsToUI();
+    resetGame();
 }
 
 // --- Keyboard ---
@@ -857,6 +876,9 @@ function init() {
     modeSelector.addEventListener('click', (e) => handlePillClick(e, 'mode'));
     durationSelector.addEventListener('click', (e) => handlePillClick(e, 'duration'));
     wordCountSelector.addEventListener('click', (e) => handlePillClick(e, 'wordCount'));
+    quickMode.addEventListener('click', (e) => handleQuickPillClick(e, 'mode'));
+    quickDuration.addEventListener('click', (e) => handleQuickPillClick(e, 'duration'));
+    quickWordCount.addEventListener('click', (e) => handleQuickPillClick(e, 'wordCount'));
 
     categorySelect.addEventListener('change', (e) => {
         gameState.category = e.target.value;

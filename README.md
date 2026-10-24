@@ -10,6 +10,7 @@ Open `index.html` in a browser, or serve the folder with any static file server.
 
 ## What it does
 
+- **Mode and length**: picked from the bar above the text or in Settings. Changing them starts a new run.
 - **Time mode**: type for 15, 30, or 60 seconds. When you finish a passage a new one loads until the clock runs out.
 - **Words mode**: type a fixed 10, 25, or 50 words. The clock counts up.
 - **Categories**:

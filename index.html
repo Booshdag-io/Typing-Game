@@ -94,10 +94,44 @@
                     </div>
 
                     <div class="control-group right">
-                        <div id="mode-badges" class="mode-badges">
-                            <span class="badge" id="mode-badge">60s</span>
-                            <span class="badge hidden" id="ghost-badge">Ghost On</span>
+                        <div
+                            class="pill-selector compact"
+                            id="quick-mode"
+                            role="group"
+                            aria-label="Mode"
+                        >
+                            <button class="pill active" data-value="time" aria-pressed="true">
+                                Time
+                            </button>
+                            <button class="pill" data-value="words" aria-pressed="false">
+                                Words
+                            </button>
                         </div>
+                        <div
+                            class="pill-selector compact"
+                            id="quick-duration"
+                            role="group"
+                            aria-label="Duration"
+                        >
+                            <button class="pill" data-value="15" aria-pressed="false">15s</button>
+                            <button class="pill" data-value="30" aria-pressed="false">30s</button>
+                            <button class="pill active" data-value="60" aria-pressed="true">
+                                60s
+                            </button>
+                        </div>
+                        <div
+                            class="pill-selector compact hidden"
+                            id="quick-word-count"
+                            role="group"
+                            aria-label="Word count"
+                        >
+                            <button class="pill active" data-value="10" aria-pressed="true">
+                                10
+                            </button>
+                            <button class="pill" data-value="25" aria-pressed="false">25</button>
+                            <button class="pill" data-value="50" aria-pressed="false">50</button>
+                        </div>
+                        <span class="badge hidden" id="ghost-badge">Ghost On</span>
                     </div>
                 </div>
 
