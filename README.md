@@ -1,87 +1,56 @@
 # TypeSpeed
 
-**A High-Performance, Zero-Dependency Typing Accelerator.**
+A typing trainer that runs in the browser. Three files, no framework, no build step.
 
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Status](https://img.shields.io/badge/Status-Active-success.svg)]()
-[![Tech](https://img.shields.io/badge/Stack-Vanilla_JS-yellow.svg)]()
+Live: https://tmhsdigital.github.io/Typing-Game/
 
----
+## Run it
 
-## Overview
+Open `index.html` in a browser, or serve the folder with any static file server. The only network request is for two Google Fonts; without them the page falls back to system fonts.
 
-TypeSpeed is a professional-grade typing trainer engineered with a focus on aesthetics, performance, and zero-latency feedback. Unlike bloated web apps, TypeSpeed runs entirely client-side using highly optimized Vanilla JavaScript, delivering a "Glassmorphism & Tech" experience that feels more like a HUD than a website.
+## What it does
 
-Designed for developers and touch-typists who demand precision.
+- **Time mode**: type for 15, 30, or 60 seconds. When you finish a passage a new one loads until the clock runs out.
+- **Words mode**: type a fixed 10, 25, or 50 words. The clock counts up.
+- **Categories**: General and Technology quotes, or Code Snippets (a mix of JavaScript, CSS, SQL, and shell lines).
+- **Stats**: WPM, accuracy, mistakes, and your best WPM, updated as you type.
+  - WPM is correct characters divided by five, per minute of real elapsed time.
+  - Accuracy is the share of typed characters that matched, counting mistakes you later fixed.
+- **Hard Mode**: blurs the text you are typing.
+- **Ghost Mode**: records the timing of your best run and replays its position as a second cursor while you type.
+- **Results**: a modal with your WPM and accuracy, a line chart of your last ten runs once you have two or more, and a button that copies a one-line summary to the clipboard.
+- **Sound**: short tones made with the Web Audio API for keypress, mistake, and completion. Can be turned off.
+- **Keyboard**: Tab restarts while you are typing. Escape closes a dialog.
 
-## Key Capabilities
+Pasting into the input is blocked.
 
-### ⚡ Core Engine
-*   **Real-Time Telemetry**: Calculates WPM, Accuracy, and Mistake ratios on every keystroke event.
-*   **Zero Latency**: Input handling is decoupled from visual rendering for maximum responsiveness.
-*   **Offline Architecture**: No backend required. All logic, data, and assets are contained within the client.
+## Settings and data
 
-### 🎮 Gameplay Modes
-*   **Sprint**: Classic 60-second endurance test.
-*   **Blitz**: Short 15s and 30s bursts for raw speed training.
-*   **Word Count**: Race to complete fixed sets of 10, 25, or 50 words.
-*   **Code Mode**: Specialized syntax training featuring real JavaScript snippets (brackets, semicolons, camelCase).
+Everything is stored in `localStorage` under these keys:
 
-### 🛡️ Advanced Systems
-*   **Ghost Mode**: Records your keystroke timing data during a run and replays it visually in subsequent games, allowing you to race against your own "Ghost".
-*   **Anti-Cheat**: Blocks paste events and monitors input integrity.
-*   **Focus Protocol**: Automatically dims UI elements (header, footer, stats) when typing begins to eliminate peripheral distractions.
+| Key                   | Contents                                                    |
+| --------------------- | ----------------------------------------------------------- |
+| `typingGameSettings`  | mode, duration, word count, category, and the three toggles |
+| `typingGameHistory`   | last 10 runs as `{wpm, accuracy, date, mode}`               |
+| `typingGameHighScore` | best WPM across all modes                                   |
+| `typingGameBestRun`   | keystroke timings of the best run, used by Ghost Mode       |
 
-## Technical Architecture
+The best score and ghost run are shared across modes and categories, so a 10-word run and a 60-second run compete for the same number.
 
-### Audio Synthesis
-Instead of loading heavy `.mp3` assets, TypeSpeed utilizes the **Web Audio API** to synthesize sound effects in real-time:
-*   **Click**: High-frequency sine/exponential ramp.
-*   **Error**: Sawtooth wave with linear decay.
-*   **Success**: Polyphonic C-Major arpeggio.
+## Development
 
-### Data Persistence
-User progress is stored locally using the browser's `localStorage` API, persisting:
-*   **High Scores**: Best WPM per session.
-*   **History**: Last 10 runs for chart visualization.
-*   **Ghost Data**: Keystroke-level timestamp data of the best run.
-
-### Visuals
-*   **SVG Charting**: Custom implementation of line charts using SVG paths, avoiding heavy charting libraries.
-*   **CSS Variables**: extensive use of `--var` for theming and easy refactoring.
-*   **Glassmorphism**: `backdrop-filter: blur()` used heavily for the modern UI aesthetic.
-
-## Project Structure
-
-```text
-TypeSpeed/
-├── index.html       # Semantic DOM structure & Modals
-├── style.css        # 500+ lines of CSS3 (Grid, Flex, Keyframes)
-├── script.js        # Game Loop, Audio Engine, State Management
-├── README.md        # Documentation
-└── LICENSE          # Apache 2.0
+```
+npm install
+npm run lint          # ESLint on script.js
+npm run format:check  # Prettier on the top-level files
+npm run format        # Prettier, write mode
+npm run check         # both
 ```
 
-## Quick Start
+`index.html`, `script.js`, and `style.css` are the whole app. The script runs at load and expects to be the last tag in `<body>`.
 
-No build steps. No npm install. No servers.
+Deployed with GitHub Pages from the `main` branch. There are no tests.
 
-1.  **Clone**
-    ```bash
-    git clone https://github.com/TMHSDigital/Typing-Game.git
-    ```
-2.  **Run**
-    Open `index.html` in Chrome, Firefox, Edge, or Safari.
+## License
 
-## Roadmap
-
-*   [x] Core Typing Engine
-*   [x] Glassmorphism UI
-*   [x] Sound Synthesis
-*   [x] Ghost Mode
-*   [ ] Multiplayer Lobbies (WebSockets)
-*   [ ] Custom Text Import
-
----
-
-*Built with precision in 2025.*
+Apache 2.0. See `LICENSE`.

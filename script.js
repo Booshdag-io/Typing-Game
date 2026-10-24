@@ -1,13 +1,11 @@
 /**
- * Typing Game Logic
- * Built with vanilla JavaScript
+ * TypeSpeed game logic. Plain browser script, loaded at the end of <body>.
  */
 
-// --- Constants and DOM Elements ---
+// --- DOM Elements ---
 const quoteDisplayElement = document.getElementById('quote-display');
 const typingInputElement = document.getElementById('typing-input');
 const timerElement = document.getElementById('timer');
-const timerLabelElement = document.getElementById('timer-label');
 const wpmElement = document.getElementById('wpm');
 const accuracyElement = document.getElementById('accuracy');
 const mistakesElement = document.getElementById('mistakes');
@@ -15,7 +13,7 @@ const highScoreElement = document.getElementById('high-score');
 const resetButton = document.getElementById('reset-button');
 const containerElement = document.querySelector('.container');
 const categorySelect = document.getElementById('category-select');
-const timeBadge = document.getElementById('time-badge');
+const modeBadge = document.getElementById('mode-badge');
 const ghostBadge = document.getElementById('ghost-badge');
 
 // Modals
@@ -28,494 +26,669 @@ const playAgainBtn = document.getElementById('play-again-btn');
 const settingsBtn = document.getElementById('settings-btn');
 const closeSettingsBtn = document.getElementById('close-settings-btn');
 
-// Settings Inputs
+// Settings inputs
 const modeSelector = document.getElementById('mode-selector');
 const durationSelector = document.getElementById('duration-selector');
 const wordCountSelector = document.getElementById('word-count-selector');
 const timerSettingGroup = document.getElementById('timer-setting');
 const wordCountSettingGroup = document.getElementById('word-count-setting');
-const soundToggle = document.getElementById('sound-toggle-settings'); // Moved to settings
-const hardModeToggle = document.getElementById('hard-mode-toggle-settings'); // Moved to settings
+const soundToggle = document.getElementById('sound-toggle-settings');
+const hardModeToggle = document.getElementById('hard-mode-toggle-settings');
 const ghostModeToggle = document.getElementById('ghost-mode-toggle');
 
 // Chart
+const chartContainer = document.querySelector('.chart-container');
+const chartCaption = document.getElementById('chart-caption');
 const progressChart = document.getElementById('progress-chart');
 
 // --- Word Source ---
 const QUOTES = {
     general: [
-        "The quick brown fox jumps over the lazy dog.",
-        "Productivity is never an accident. It is always the result of a commitment to excellence, intelligent planning, and focused effort.",
-        "To be or not to be, that is the question.",
-        "All our dreams can come true, if we have the courage to pursue them.",
-        "It does not matter how slowly you go as long as you do not stop.",
-        "Success is not final, failure is not fatal: it is the courage to continue that counts.",
+        'The quick brown fox jumps over the lazy dog.',
+        'Productivity is never an accident. It is always the result of a commitment to excellence, intelligent planning, and focused effort.',
+        'To be or not to be, that is the question.',
+        'All our dreams can come true, if we have the courage to pursue them.',
+        'It does not matter how slowly you go as long as you do not stop.',
+        'Success is not final, failure is not fatal: it is the courage to continue that counts.',
         "Believe you can and you're halfway there.",
-        "The only way to do great work is to love what you do.",
-        "In the middle of every difficulty lies opportunity.",
-        "Happiness is not something ready made. It comes from your own actions."
+        'The only way to do great work is to love what you do.',
+        'In the middle of every difficulty lies opportunity.',
+        'Happiness is not something ready made. It comes from your own actions.',
     ],
     technology: [
-        "Any sufficiently advanced technology is indistinguishable from magic.",
-        "The science of today is the technology of tomorrow.",
-        "Technology is best when it brings people together.",
-        "It has become appallingly obvious that our technology has exceeded our humanity.",
-        "The Web does not just connect machines, it connects people.",
-        "Innovation distinguishes between a leader and a follower.",
-        "First we build the tools, then they build us.",
+        'Any sufficiently advanced technology is indistinguishable from magic.',
+        'The science of today is the technology of tomorrow.',
+        'Technology is best when it brings people together.',
+        'It has become appallingly obvious that our technology has exceeded our humanity.',
+        'The Web does not just connect machines, it connects people.',
+        'Innovation distinguishes between a leader and a follower.',
+        'First we build the tools, then they build us.',
         "Code is like humor. When you have to explain it, it's bad.",
-        "Simplicity is the soul of efficiency.",
-        "Make it work, make it right, make it fast."
+        'Simplicity is the soul of efficiency.',
+        'Make it work, make it right, make it fast.',
     ],
     code: [
         "function hello() { console.log('Hello World'); }",
-        "const sum = (a, b) => a + b;",
-        "if (input === expected) { return true; } else { return false; }",
+        'const sum = (a, b) => a + b;',
+        'if (input === expected) { return true; } else { return false; }',
         "document.getElementById('root').innerHTML = '<div></div>';",
-        "for (let i = 0; i < array.length; i++) { process(array[i]); }",
+        'for (let i = 0; i < array.length; i++) { process(array[i]); }',
         "import React, { useState } from 'react';",
         "git commit -m 'Initial commit'",
-        "border-radius: 8px; background-color: #f0f0f0;",
-        "SELECT * FROM users WHERE id = 1;",
-        "while (isAlive) { eat(); sleep(); code(); }"
-    ]
+        'border-radius: 8px; background-color: #f0f0f0;',
+        'SELECT * FROM users WHERE id = 1;',
+        'while (isAlive) { eat(); sleep(); code(); }',
+    ],
 };
 
-// --- Game State Variables ---
-let gameState = {
+// --- Storage ---
+const STORAGE_KEYS = {
+    history: 'typingGameHistory',
+    highScore: 'typingGameHighScore',
+    bestRun: 'typingGameBestRun',
+    settings: 'typingGameSettings',
+};
+
+function loadJSON(key, fallback) {
+    try {
+        const raw = localStorage.getItem(key);
+        return raw === null ? fallback : JSON.parse(raw);
+    } catch (err) {
+        console.warn(`Ignoring unreadable localStorage value for ${key}`, err);
+        return fallback;
+    }
+}
+
+function saveJSON(key, value) {
+    try {
+        localStorage.setItem(key, JSON.stringify(value));
+    } catch (err) {
+        console.warn(`Could not save ${key} to localStorage`, err);
+    }
+}
+
+function readHighScore() {
+    return Number(localStorage.getItem(STORAGE_KEYS.highScore)) || 0;
+}
+
+// --- Game State ---
+const DURATIONS = [15, 30, 60];
+const WORD_COUNTS = [10, 25, 50];
+const DEFAULT_SETTINGS = {
     mode: 'time', // 'time' or 'words'
-    duration: 60, // seconds
-    wordCount: 10, // words
+    duration: 60, // seconds, time mode
+    wordCount: 10, // words mode
     category: 'general',
     isGhostEnabled: false,
     isHardMode: false,
-    isSoundEnabled: true
+    isSoundEnabled: true,
 };
 
-let runtime = {
-    timer: 60,
-    interval: null,
+function sanitizeSettings(saved) {
+    const settings = { ...DEFAULT_SETTINGS };
+    if (!saved || typeof saved !== 'object') return settings;
+    if (saved.mode === 'words') settings.mode = 'words';
+    if (DURATIONS.includes(saved.duration)) settings.duration = saved.duration;
+    if (WORD_COUNTS.includes(saved.wordCount)) settings.wordCount = saved.wordCount;
+    if (Object.prototype.hasOwnProperty.call(QUOTES, saved.category)) {
+        settings.category = saved.category;
+    }
+    for (const flag of ['isGhostEnabled', 'isHardMode', 'isSoundEnabled']) {
+        if (typeof saved[flag] === 'boolean') settings[flag] = saved[flag];
+    }
+    return settings;
+}
+
+const gameState = sanitizeSettings(loadJSON(STORAGE_KEYS.settings, null));
+
+// Per-run data. Reset by resetGame().
+const runtime = {
     isStarted: false,
     startTime: 0,
-    totalChars: 0,
-    correctChars: 0,
-    mistakes: 0,
-    keystrokes: [] // Array of {time: ms, charIndex: int} for Ghost
+    endTime: 0,
+    interval: null,
+    timer: 0, // seconds shown in the HUD
+    quoteText: '', // text currently on screen
+    quoteBase: 0, // characters in quotes already completed this run (time mode)
+    baseCorrect: 0, // correct characters in completed quotes
+    baseTyped: 0, // typed characters in completed quotes
+    correctChars: 0, // correct characters across the whole run
+    typedChars: 0, // typed characters across the whole run
+    keystrokes: 0, // characters inserted, including ones later deleted
+    mistakes: 0, // inserted characters that did not match
+    ghostStrokes: [], // {t: ms since start, i: character index} for Ghost Mode
+    ghostTimeouts: [],
 };
 
-let runHistory = JSON.parse(localStorage.getItem('typingGameHistory')) || [];
-let bestRun = JSON.parse(localStorage.getItem('typingGameBestRun')) || null;
+let runHistory = loadJSON(STORAGE_KEYS.history, []);
+if (!Array.isArray(runHistory)) runHistory = [];
+let bestRun = loadJSON(STORAGE_KEYS.bestRun, null);
+if (!bestRun || !Array.isArray(bestRun.keystrokes)) bestRun = null;
 
-// --- Audio System ---
-const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+// --- Audio ---
+// Created on first use so the browser does not warn about an AudioContext
+// started before any user gesture.
+let audioContext = null;
+
+function getAudioContext() {
+    if (!audioContext) {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return null;
+        audioContext = new Ctx();
+    }
+    if (audioContext.state === 'suspended') audioContext.resume();
+    return audioContext;
+}
+
+function playTone(ctx, { type, startFreq, endFreq, ramp, gain, duration, at }) {
+    const osc = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+    osc.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    osc.type = type;
+    osc.frequency.setValueAtTime(startFreq, at);
+    if (endFreq !== undefined) {
+        if (ramp === 'linear') osc.frequency.linearRampToValueAtTime(endFreq, at + duration);
+        else osc.frequency.exponentialRampToValueAtTime(endFreq, at + duration);
+    }
+    gainNode.gain.setValueAtTime(gain, at);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, at + duration);
+    osc.start(at);
+    osc.stop(at + duration);
+}
 
 function playSound(type) {
     if (!gameState.isSoundEnabled) return;
-    if (audioContext.state === 'suspended') audioContext.resume();
-
-    const osc = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-
-    osc.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-
-    const now = audioContext.currentTime;
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
 
     if (type === 'click') {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(800, now);
-        osc.frequency.exponentialRampToValueAtTime(400, now + 0.05);
-        gainNode.gain.setValueAtTime(0.05, now);
-        gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
-        osc.start(now);
-        osc.stop(now + 0.05);
+        playTone(ctx, {
+            type: 'sine',
+            startFreq: 800,
+            endFreq: 400,
+            gain: 0.05,
+            duration: 0.05,
+            at: now,
+        });
     } else if (type === 'error') {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(100, now);
-        osc.frequency.linearRampToValueAtTime(80, now + 0.15);
-        gainNode.gain.setValueAtTime(0.08, now);
-        gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-        osc.start(now);
-        osc.stop(now + 0.15);
+        playTone(ctx, {
+            type: 'sawtooth',
+            startFreq: 100,
+            endFreq: 80,
+            ramp: 'linear',
+            gain: 0.08,
+            duration: 0.15,
+            at: now,
+        });
     } else if (type === 'success') {
-        const notes = [523.25, 659.25, 783.99, 1046.50];
-        notes.forEach((note, i) => {
-            const osc2 = audioContext.createOscillator();
-            const gain2 = audioContext.createGain();
-            osc2.connect(gain2);
-            gain2.connect(audioContext.destination);
-            const time = now + (i * 0.1);
-            osc2.type = 'sine';
-            osc2.frequency.value = note;
-            gain2.gain.setValueAtTime(0.05, time);
-            gain2.gain.exponentialRampToValueAtTime(0.001, time + 0.5);
-            osc2.start(time);
-            osc2.stop(time + 0.5);
+        // C5, E5, G5, C6
+        [523.25, 659.25, 783.99, 1046.5].forEach((note, i) => {
+            playTone(ctx, {
+                type: 'sine',
+                startFreq: note,
+                gain: 0.05,
+                duration: 0.5,
+                at: now + i * 0.1,
+            });
         });
     }
 }
 
-// --- Core Logic ---
+// --- Quote Selection ---
+let lastQuoteIndex = -1;
 
-function getRandomQuote() {
-    const categoryQuotes = QUOTES[gameState.category] || QUOTES['general'];
-    const randomIndex = Math.floor(Math.random() * categoryQuotes.length);
-    // For word count mode, we might need longer text, so we could join multiple
+function pickQuote(categoryQuotes) {
+    let index;
+    do {
+        index = Math.floor(Math.random() * categoryQuotes.length);
+    } while (categoryQuotes.length > 1 && index === lastQuoteIndex);
+    lastQuoteIndex = index;
+    return categoryQuotes[index];
+}
+
+function getQuoteText() {
+    const categoryQuotes = QUOTES[gameState.category] || QUOTES.general;
     if (gameState.mode === 'words') {
-        // Simplification: Just return a long enough string or multiple quotes
-        let text = categoryQuotes[randomIndex];
-        while (text.split(' ').length < gameState.wordCount) {
-            text += ' ' + categoryQuotes[Math.floor(Math.random() * categoryQuotes.length)];
+        const words = [];
+        while (words.length < gameState.wordCount) {
+            words.push(...pickQuote(categoryQuotes).split(' '));
         }
-        // Trim to approximate word count for cleaner UI
-        return text.split(' ').slice(0, gameState.wordCount).join(' ');
+        return words.slice(0, gameState.wordCount).join(' ');
     }
-    return categoryQuotes[randomIndex];
+    return pickQuote(categoryQuotes);
 }
 
 function renderNewQuote() {
-    const quote = getRandomQuote();
-    quoteDisplayElement.innerHTML = '';
-    
-    // Create Ghost Cursor Element if needed
+    runtime.quoteText = getQuoteText();
+    quoteDisplayElement.textContent = '';
+
     if (gameState.isGhostEnabled) {
         const ghostCursor = document.createElement('div');
         ghostCursor.id = 'ghost-cursor';
-        ghostCursor.className = 'ghost-cursor'; // Need CSS
+        ghostCursor.className = 'ghost-cursor';
         quoteDisplayElement.appendChild(ghostCursor);
     }
 
-    quote.split('').forEach(character => {
-        const characterSpan = document.createElement('span');
-        characterSpan.innerText = character;
-        quoteDisplayElement.appendChild(characterSpan);
+    const fragment = document.createDocumentFragment();
+    runtime.quoteText.split('').forEach((character) => {
+        const span = document.createElement('span');
+        span.textContent = character;
+        fragment.appendChild(span);
     });
-    
-    if (quoteDisplayElement.querySelector('span')) {
-        quoteDisplayElement.querySelector('span').classList.add('current');
-    }
+    quoteDisplayElement.appendChild(fragment);
+
+    const firstSpan = quoteDisplayElement.querySelector('span');
+    if (firstSpan) firstSpan.classList.add('current');
+
     typingInputElement.value = '';
+    typingInputElement.maxLength = runtime.quoteText.length;
 }
 
+// --- Core Logic ---
 function handleInput(e) {
-    if (!runtime.isStarted) {
-        startGame();
-    }
+    if (settingsModal.classList.contains('show')) return;
+    if (!runtime.isStarted) startGame();
 
-    const arrayQuote = quoteDisplayElement.querySelectorAll('span');
-    const arrayValue = typingInputElement.value.split('');
-    
-    // Record keystroke for Ghost
-    if (runtime.isStarted) {
-        const timeOffset = Date.now() - runtime.startTime;
-        runtime.keystrokes.push({ t: timeOffset, i: arrayValue.length });
-    }
+    const typed = typingInputElement.value;
+    const quote = runtime.quoteText;
+    const spans = quoteDisplayElement.querySelectorAll('span');
 
-    // Mistake Logic
-    if (e.inputType === 'insertText' || e.inputType === 'insertCompositionText') {
-        const currentInd = arrayValue.length - 1;
-        if (currentInd < arrayQuote.length) {
-             const charTyped = arrayValue[currentInd];
-             const charQuote = arrayQuote[currentInd].innerText;
-             if (charTyped !== charQuote) {
-                 runtime.mistakes++;
-                 mistakesElement.innerText = runtime.mistakes;
-                 playSound('error');
-             } else {
-                 playSound('click');
-             }
+    runtime.ghostStrokes.push({
+        t: Date.now() - runtime.startTime,
+        i: runtime.quoteBase + typed.length,
+    });
+
+    // Count keystrokes and mistakes for the characters just inserted.
+    if (e.inputType && e.inputType.startsWith('insert') && e.data) {
+        const inserted = e.data;
+        const start = typed.length - inserted.length;
+        let wrong = 0;
+        for (let k = 0; k < inserted.length; k++) {
+            const pos = start + k;
+            if (pos < 0 || pos >= quote.length) continue;
+            runtime.keystrokes++;
+            if (inserted[k] !== quote[pos]) wrong++;
+        }
+        if (wrong > 0) {
+            runtime.mistakes += wrong;
+            mistakesElement.textContent = runtime.mistakes;
+            playSound('error');
+        } else {
+            playSound('click');
         }
     }
 
     let correctCount = 0;
-    arrayQuote.forEach((characterSpan, index) => {
-        const character = arrayValue[index];
-        characterSpan.classList.remove('correct', 'incorrect', 'current');
-        
-        if (character == null) {
-            // Not typed yet; leave the span unmarked.
-        } else if (character === characterSpan.innerText) {
-            characterSpan.classList.add('correct');
+    spans.forEach((span, index) => {
+        span.classList.remove('correct', 'incorrect', 'current');
+        if (index >= typed.length) return;
+        if (typed[index] === quote[index]) {
+            span.classList.add('correct');
             correctCount++;
         } else {
-            characterSpan.classList.add('incorrect');
+            span.classList.add('incorrect');
         }
     });
+    if (typed.length < spans.length) spans[typed.length].classList.add('current');
 
-    if (arrayValue.length < arrayQuote.length) {
-        arrayQuote[arrayValue.length].classList.add('current');
+    runtime.correctChars = runtime.baseCorrect + correctCount;
+    runtime.typedChars = runtime.baseTyped + typed.length;
+    updateMetrics();
+
+    if (typed.length === quote.length) {
+        if (gameState.mode === 'time') {
+            // Keep going until the clock runs out.
+            runtime.baseCorrect += correctCount;
+            runtime.baseTyped += typed.length;
+            runtime.quoteBase += quote.length;
+            renderNewQuote();
+        } else {
+            endGame();
+        }
     }
+}
 
-    runtime.correctChars = correctCount;
-    runtime.totalChars = arrayValue.length;
-
-    // Check Completion
-    if (arrayValue.length === arrayQuote.length) {
-        endGame();
-    }
+function elapsedMs() {
+    const end = runtime.endTime || Date.now();
+    return end - runtime.startTime;
 }
 
 function startGame() {
     runtime.isStarted = true;
     runtime.startTime = Date.now();
+    runtime.endTime = 0;
     containerElement.classList.add('focus-mode');
-    
-    if (gameState.mode === 'time') {
-        runtime.timer = gameState.duration;
-        timerLabelElement.innerText = 'Time';
-        timerElement.innerText = runtime.timer;
-        
-        runtime.interval = setInterval(() => {
-            runtime.timer--;
-            timerElement.innerText = runtime.timer;
-            updateMetrics();
-            if (runtime.timer <= 0) endGame();
-        }, 1000);
-    } else {
-        // Word Count Mode: Timer counts UP
-        runtime.timer = 0;
-        timerLabelElement.innerText = 'Time';
-        timerElement.innerText = 0;
-        runtime.interval = setInterval(() => {
-            runtime.timer++;
-            timerElement.innerText = runtime.timer;
-            updateMetrics(); 
-        }, 1000);
-    }
 
-    if (gameState.isGhostEnabled && bestRun) {
-        startGhostPlayback();
+    runtime.timer = gameState.mode === 'time' ? gameState.duration : 0;
+    timerElement.textContent = runtime.timer;
+    runtime.interval = setInterval(tick, 250);
+
+    if (gameState.isGhostEnabled && bestRun) startGhostPlayback();
+}
+
+function tick() {
+    const elapsedSeconds = Math.floor(elapsedMs() / 1000);
+    if (gameState.mode === 'time') {
+        runtime.timer = Math.max(0, gameState.duration - elapsedSeconds);
+        timerElement.textContent = runtime.timer;
+        if (elapsedMs() >= gameState.duration * 1000) {
+            endGame(runtime.startTime + gameState.duration * 1000);
+            return;
+        }
+    } else {
+        runtime.timer = elapsedSeconds;
+        timerElement.textContent = runtime.timer;
     }
+    updateMetrics();
 }
 
 function startGhostPlayback() {
-    const ghostCursor = document.getElementById('ghost-cursor');
-    if (!ghostCursor) return;
-    
-    const spans = quoteDisplayElement.querySelectorAll('span');
-    // Simple playback: schedule moves based on recorded timestamps
-    bestRun.keystrokes.forEach(stroke => {
+    if (!document.getElementById('ghost-cursor')) return;
+    runtime.ghostTimeouts = bestRun.keystrokes.map((stroke) =>
         setTimeout(() => {
             if (!runtime.isStarted) return;
-            // Move ghost to index i
-            const targetSpan = spans[stroke.i];
-            if (targetSpan) {
-                // Position logic needs simple offset or class toggle
-                // Ideally, we move an absolute positioned div to the span's coordinates
-                const rect = targetSpan.getBoundingClientRect();
-                const parentRect = quoteDisplayElement.getBoundingClientRect();
-                ghostCursor.style.transform = `translate(${rect.left - parentRect.left}px, ${rect.top - parentRect.top}px)`;
-                ghostCursor.style.opacity = 1;
-            }
-        }, stroke.t);
-    });
+            // Look everything up live: the quote (and its spans) may have
+            // been replaced since playback started.
+            const cursor = document.getElementById('ghost-cursor');
+            const spans = quoteDisplayElement.querySelectorAll('span');
+            const targetSpan = spans[stroke.i - runtime.quoteBase];
+            if (!cursor || !targetSpan) return;
+            const rect = targetSpan.getBoundingClientRect();
+            const parentRect = quoteDisplayElement.getBoundingClientRect();
+            const x = rect.left - parentRect.left;
+            const y = rect.top - parentRect.top;
+            cursor.style.transform = `translate(${x}px, ${y}px)`;
+            cursor.style.opacity = 1;
+        }, stroke.t)
+    );
+}
+
+function stopGhostPlayback() {
+    runtime.ghostTimeouts.forEach(clearTimeout);
+    runtime.ghostTimeouts = [];
 }
 
 function updateMetrics() {
-    let timeElapsed;
-    if (gameState.mode === 'time') {
-        timeElapsed = gameState.duration - runtime.timer;
-    } else {
-        timeElapsed = runtime.timer;
-    }
-    
-    let wpm = 0;
-    if (timeElapsed > 0) {
-        wpm = Math.round((runtime.totalChars / 5) / (timeElapsed / 60));
-        wpmElement.innerText = wpm;
-    }
-
-    let accuracy = 0;
-    if (runtime.totalChars > 0) {
-        accuracy = Math.round((runtime.correctChars / runtime.totalChars) * 100);
-    }
-    accuracyElement.innerText = accuracy;
-    return wpm;
+    const elapsed = elapsedMs();
+    const wpm = elapsed >= 1000 ? Math.round(runtime.correctChars / 5 / (elapsed / 60000)) : 0;
+    const accuracy =
+        runtime.keystrokes > 0
+            ? Math.round(((runtime.keystrokes - runtime.mistakes) / runtime.keystrokes) * 100)
+            : 100;
+    wpmElement.textContent = wpm;
+    accuracyElement.textContent = accuracy;
+    return { wpm, accuracy };
 }
 
-function endGame() {
+function endGame(endTime = Date.now()) {
+    if (!runtime.isStarted) return;
+    runtime.isStarted = false;
+    runtime.endTime = endTime;
     clearInterval(runtime.interval);
+    stopGhostPlayback();
     typingInputElement.disabled = true;
     containerElement.classList.remove('focus-mode');
-    
-    const finalWPM = updateMetrics();
-    
-    // Save History
-    const result = {
-        wpm: finalWPM,
-        accuracy: parseInt(accuracyElement.innerText),
-        date: new Date().toISOString(),
-        mode: gameState.mode
-    };
-    runHistory.unshift(result);
-    if (runHistory.length > 10) runHistory.pop();
-    localStorage.setItem('typingGameHistory', JSON.stringify(runHistory));
-    
-    // Check Best Run (Simple WPM check for now)
-    const currentHighScore = parseInt(localStorage.getItem('typingGameHighScore') || 0);
-    if (finalWPM > currentHighScore) {
-        localStorage.setItem('typingGameHighScore', finalWPM);
-        // Save Ghost Data
-        bestRun = { keystrokes: runtime.keystrokes, wpm: finalWPM };
-        localStorage.setItem('typingGameBestRun', JSON.stringify(bestRun));
-        playSound('success');
-    } else {
-        playSound('success');
+
+    const { wpm, accuracy } = updateMetrics();
+
+    runHistory.unshift({ wpm, accuracy, date: new Date().toISOString(), mode: gameState.mode });
+    runHistory.length = Math.min(runHistory.length, 10);
+    saveJSON(STORAGE_KEYS.history, runHistory);
+
+    if (wpm > readHighScore()) {
+        localStorage.setItem(STORAGE_KEYS.highScore, String(wpm));
+        bestRun = { keystrokes: runtime.ghostStrokes, wpm };
+        saveJSON(STORAGE_KEYS.bestRun, bestRun);
     }
 
+    playSound('success');
     updateHighScoreDisplay();
     renderChart();
-    showResultModal(finalWPM);
+    showResultModal(wpm, accuracy);
 }
 
 function renderChart() {
-    // Simple SVG Line Chart
-    const data = runHistory.map(h => h.wpm).reverse(); // Oldest to newest
+    const data = runHistory.map((h) => h.wpm).reverse(); // oldest to newest
+    chartContainer.classList.toggle('hidden', data.length < 2);
     if (data.length < 2) return;
 
     const width = 300;
     const height = 100;
-    const max = Math.max(...data, 100); // Scale to at least 100
-    const min = Math.min(...data, 0);
-    
-    const points = data.map((val, i) => {
-        const x = (i / (data.length - 1)) * width;
-        const y = height - ((val - min) / (max - min)) * height;
-        return `${x},${y}`;
-    }).join(' ');
+    const pad = 6;
+    const max = Math.max(...data);
+    const min = Math.min(...data);
+    const range = max - min || 1;
+    const x = (i) => pad + (i / (data.length - 1)) * (width - 2 * pad);
+    const y = (v) => pad + (1 - (v - min) / range) * (height - 2 * pad);
 
-    const circles = data.map((val, i) => {
-         const x = (i / (data.length - 1)) * width;
-         const y = height - ((val - min) / (max - min)) * height;
-         return `<circle cx="${x}" cy="${y}" r="3" />`;
-    }).join('');
+    const points = data.map((v, i) => `${x(i)},${y(v)}`).join(' ');
+    const circles = data.map((v, i) => `<circle cx="${x(i)}" cy="${y(v)}" r="3" />`).join('');
+    progressChart.innerHTML = `<polyline points="${points}" />${circles}`;
 
-    progressChart.innerHTML = `
-        <polyline points="${points}" />
-        ${circles}
-    `;
+    const label = data.length === 1 ? 'run' : 'runs';
+    chartCaption.textContent =
+        min === max
+            ? `Last ${data.length} ${label}, ${min} WPM`
+            : `Last ${data.length} ${label}, ${min} to ${max} WPM`;
 }
 
 function resetGame() {
     clearInterval(runtime.interval);
-    runtime.isStarted = false;
-    runtime.totalChars = 0;
-    runtime.correctChars = 0;
-    runtime.mistakes = 0;
-    runtime.keystrokes = [];
-    
-    timerElement.innerText = gameState.mode === 'time' ? gameState.duration : 0;
-    wpmElement.innerText = 0;
-    accuracyElement.innerText = 100;
-    mistakesElement.innerText = 0;
-    
+    stopGhostPlayback();
+    Object.assign(runtime, {
+        isStarted: false,
+        startTime: 0,
+        endTime: 0,
+        interval: null,
+        quoteBase: 0,
+        baseCorrect: 0,
+        baseTyped: 0,
+        correctChars: 0,
+        typedChars: 0,
+        keystrokes: 0,
+        mistakes: 0,
+        ghostStrokes: [],
+    });
+
+    runtime.timer = gameState.mode === 'time' ? gameState.duration : 0;
+    timerElement.textContent = runtime.timer;
+    wpmElement.textContent = 0;
+    accuracyElement.textContent = 100;
+    mistakesElement.textContent = 0;
+
     containerElement.classList.remove('focus-mode');
     typingInputElement.disabled = false;
     resultModal.classList.remove('show');
     settingsModal.classList.remove('show');
-    
-    // Update UI Badges
-    timeBadge.innerText = gameState.mode === 'time' ? `${gameState.duration}s` : `${gameState.wordCount} Words`;
-    ghostBadge.classList.toggle('hidden', !gameState.isGhostEnabled);
-    
+
+    updateBadges();
     renderNewQuote();
     typingInputElement.focus();
 }
 
-// --- UI Handlers ---
-
-// Settings Logic
-function openSettings() {
-    settingsModal.classList.add('show');
-}
-function closeSettings() {
-    settingsModal.classList.remove('show');
-    // Apply logic is effectively immediate as we update state on click
-    resetGame(); // Restart with new settings
-}
-
-// Toggle logic for pills
-function handlePillClick(e, group) {
-    if (!e.target.classList.contains('pill')) return;
-    const parent = e.currentTarget;
-    parent.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
-    e.target.classList.add('active');
-    
-    const val = e.target.dataset.value;
-    if (group === 'mode') {
-        gameState.mode = val;
-        if (val === 'time') {
-            timerSettingGroup.classList.remove('hidden');
-            wordCountSettingGroup.classList.add('hidden');
-        } else {
-            timerSettingGroup.classList.add('hidden');
-            wordCountSettingGroup.classList.remove('hidden');
-        }
-    } else if (group === 'duration') {
-        gameState.duration = parseInt(val);
-    } else if (group === 'wordCount') {
-        gameState.wordCount = parseInt(val);
-    }
-}
-
-// --- Initializers ---
-function init() {
-    updateHighScoreDisplay();
-    renderNewQuote();
-    
-    // Events
-    typingInputElement.addEventListener('input', handleInput);
-    resetButton.addEventListener('click', resetGame);
-    
-    // Settings Events
-    settingsBtn.addEventListener('click', openSettings);
-    closeSettingsBtn.addEventListener('click', closeSettings);
-    
-    modeSelector.addEventListener('click', (e) => handlePillClick(e, 'mode'));
-    durationSelector.addEventListener('click', (e) => handlePillClick(e, 'duration'));
-    wordCountSelector.addEventListener('click', (e) => handlePillClick(e, 'wordCount'));
-    
-    categorySelect.addEventListener('change', (e) => {
-        gameState.category = e.target.value;
-        resetGame();
-    });
-    
-    // Toggles
-    soundToggle.addEventListener('change', (e) => gameState.isSoundEnabled = e.target.checked);
-    hardModeToggle.addEventListener('change', (e) => {
-        gameState.isHardMode = e.target.checked;
-        if (gameState.isHardMode) quoteDisplayElement.classList.add('blurred');
-        else quoteDisplayElement.classList.remove('blurred');
-    });
-    ghostModeToggle.addEventListener('change', (e) => gameState.isGhostEnabled = e.target.checked);
-    
-    // Result Modal
-    shareBtn.addEventListener('click', () => {
-        /* Share Logic */
-        const text = `I just typed ${wpmElement.innerText} WPM on TypeSpeed!`;
-        navigator.clipboard.writeText(text);
-        shareBtn.innerText = 'Copied!';
-        setTimeout(() => shareBtn.innerText = 'Share Result', 2000);
-    });
-    playAgainBtn.addEventListener('click', resetGame);
-
-    // Keyboard
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Tab') {
-            e.preventDefault();
-            resetGame();
-        }
-    });
+function updateBadges() {
+    modeBadge.textContent =
+        gameState.mode === 'time' ? `${gameState.duration}s` : `${gameState.wordCount} words`;
+    ghostBadge.classList.toggle('hidden', !gameState.isGhostEnabled);
 }
 
 function updateHighScoreDisplay() {
-    highScoreElement.innerText = localStorage.getItem('typingGameHighScore') || 0;
+    highScoreElement.textContent = readHighScore();
 }
 
-function showResultModal(wpm) {
-    modalWpmElement.innerText = wpm;
-    modalAccuracyElement.innerText = accuracyElement.innerText + '%';
+// Focus an element inside a dialog that was shown in this same tick. If the
+// browser refuses because the dialog has not rendered yet, retry next frame.
+function focusInDialog(element) {
+    element.focus();
+    if (document.activeElement !== element) {
+        requestAnimationFrame(() => element.focus());
+    }
+}
+
+function showResultModal(wpm, accuracy) {
+    modalWpmElement.textContent = wpm;
+    modalAccuracyElement.textContent = `${accuracy}%`;
     resultModal.classList.add('show');
+    focusInDialog(playAgainBtn);
+}
+
+// --- Settings ---
+function saveSettings() {
+    saveJSON(STORAGE_KEYS.settings, gameState);
+}
+
+function setActivePill(selector, value) {
+    selector.querySelectorAll('.pill').forEach((pill) => {
+        pill.classList.toggle('active', pill.dataset.value === value);
+    });
+}
+
+// Push gameState into the settings controls and the quote display.
+function applySettingsToUI() {
+    setActivePill(modeSelector, gameState.mode);
+    setActivePill(durationSelector, String(gameState.duration));
+    setActivePill(wordCountSelector, String(gameState.wordCount));
+    timerSettingGroup.classList.toggle('hidden', gameState.mode !== 'time');
+    wordCountSettingGroup.classList.toggle('hidden', gameState.mode !== 'words');
+    categorySelect.value = gameState.category;
+    soundToggle.checked = gameState.isSoundEnabled;
+    hardModeToggle.checked = gameState.isHardMode;
+    ghostModeToggle.checked = gameState.isGhostEnabled;
+    quoteDisplayElement.classList.toggle('blurred', gameState.isHardMode);
+}
+
+function openSettings() {
+    typingInputElement.blur();
+    settingsModal.classList.add('show');
+    focusInDialog(modeSelector.querySelector('.pill.active') || closeSettingsBtn);
+}
+
+// Pill clicks update gameState immediately; the new settings take effect
+// when the modal closes and the game resets.
+function closeSettings() {
+    settingsModal.classList.remove('show');
+    saveSettings();
+    resetGame();
+}
+
+function handlePillClick(e, group) {
+    const pill = e.target.closest('.pill');
+    if (!pill) return;
+    setActivePill(e.currentTarget, pill.dataset.value);
+
+    const value = pill.dataset.value;
+    if (group === 'mode') {
+        gameState.mode = value === 'words' ? 'words' : 'time';
+        timerSettingGroup.classList.toggle('hidden', gameState.mode !== 'time');
+        wordCountSettingGroup.classList.toggle('hidden', gameState.mode !== 'words');
+    } else if (group === 'duration') {
+        gameState.duration = parseInt(value, 10);
+    } else if (group === 'wordCount') {
+        gameState.wordCount = parseInt(value, 10);
+    }
+}
+
+// --- Keyboard ---
+function isModalOpen(modal) {
+    return modal.classList.contains('show');
+}
+
+// Keep Tab and Shift+Tab inside the open dialog.
+function trapFocus(e, modal) {
+    const focusable = Array.from(
+        modal.querySelectorAll('button, input, select, [tabindex]:not([tabindex="-1"])')
+    ).filter((el) => !el.disabled && el.offsetParent !== null);
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (!modal.contains(document.activeElement)) {
+        e.preventDefault();
+        first.focus();
+    } else if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+    }
+}
+
+function handleKeydown(e) {
+    if (e.key === 'Escape') {
+        if (isModalOpen(settingsModal)) closeSettings();
+        else if (isModalOpen(resultModal)) resetGame();
+        return;
+    }
+    if (e.key !== 'Tab') return;
+
+    if (isModalOpen(settingsModal)) {
+        trapFocus(e, settingsModal);
+        return;
+    }
+    if (isModalOpen(resultModal)) {
+        trapFocus(e, resultModal);
+        return;
+    }
+
+    // Tab restarts only while typing. Elsewhere, and for Shift+Tab, it
+    // moves focus as usual so the page stays keyboard-navigable.
+    if (e.shiftKey || document.activeElement !== typingInputElement) return;
+    e.preventDefault();
+    resetGame();
+}
+
+// --- Init ---
+function init() {
+    applySettingsToUI();
+    updateHighScoreDisplay();
+
+    typingInputElement.addEventListener('input', handleInput);
+    typingInputElement.addEventListener('paste', (e) => e.preventDefault());
+    typingInputElement.addEventListener('drop', (e) => e.preventDefault());
+    resetButton.addEventListener('click', resetGame);
+
+    settingsBtn.addEventListener('click', openSettings);
+    closeSettingsBtn.addEventListener('click', closeSettings);
+    modeSelector.addEventListener('click', (e) => handlePillClick(e, 'mode'));
+    durationSelector.addEventListener('click', (e) => handlePillClick(e, 'duration'));
+    wordCountSelector.addEventListener('click', (e) => handlePillClick(e, 'wordCount'));
+
+    categorySelect.addEventListener('change', (e) => {
+        gameState.category = e.target.value;
+        saveSettings();
+        resetGame();
+    });
+
+    soundToggle.addEventListener('change', (e) => {
+        gameState.isSoundEnabled = e.target.checked;
+    });
+    hardModeToggle.addEventListener('change', (e) => {
+        gameState.isHardMode = e.target.checked;
+        quoteDisplayElement.classList.toggle('blurred', gameState.isHardMode);
+    });
+    ghostModeToggle.addEventListener('change', (e) => {
+        gameState.isGhostEnabled = e.target.checked;
+    });
+
+    shareBtn.addEventListener('click', async () => {
+        const text = `${modalWpmElement.textContent} WPM at ${modalAccuracyElement.textContent} accuracy on TypeSpeed`;
+        try {
+            await navigator.clipboard.writeText(text);
+            shareBtn.textContent = 'Copied!';
+        } catch {
+            shareBtn.textContent = 'Copy failed';
+        }
+        setTimeout(() => {
+            shareBtn.textContent = 'Share Result';
+        }, 2000);
+    });
+    playAgainBtn.addEventListener('click', resetGame);
+
+    document.addEventListener('keydown', handleKeydown);
+
+    resetGame();
 }
 
 init();

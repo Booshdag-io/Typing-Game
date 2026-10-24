@@ -1,180 +1,258 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vanilla JS Typing Game</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
-    <div class="background-glow"></div>
-    <div class="container">
-        <header>
-            <h1>TYPE<span class="accent">SPEED</span></h1>
-            <button id="settings-btn" class="icon-btn" title="Settings">
-                <svg pointer-events="none" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="3"></circle>
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                </svg>
-            </button>
-        </header>
-
-        <div class="game-area">
-            <div id="stats-bar" class="stats">
-                <div class="stat-item">
-                    <span class="label" id="timer-label">Time</span>
-                    <span id="timer" class="value">60</span>
-                    <span class="unit">s</span>
-                </div>
-                <div class="stat-item primary">
-                    <span class="label">WPM</span>
-                    <span id="wpm" class="value">0</span>
-                </div>
-                <div class="stat-item">
-                    <span class="label">Accuracy</span>
-                    <span id="accuracy" class="value">100</span>
-                    <span class="unit">%</span>
-                </div>
-                <div class="stat-item">
-                    <span class="label">Mistakes</span>
-                    <span id="mistakes" class="value">0</span>
-                </div>
-                <div class="stat-item highlight">
-                    <span class="label">Best</span>
-                    <span id="high-score" class="value">0</span>
-                </div>
-            </div>
-
-            <div class="controls">
-                <div class="control-group left">
-                    <select id="category-select" class="category-select">
-                        <option value="general">General</option>
-                        <option value="technology">Technology</option>
-                        <option value="code">Code Snippets</option>
-                    </select>
-                </div>
-                
-                <div class="control-group right">
-                     <div id="mode-badges" class="mode-badges">
-                        <!-- Dynamic badges for current settings -->
-                        <span class="badge" id="time-badge">60s</span>
-                        <span class="badge hidden" id="ghost-badge">Ghost On</span>
-                     </div>
-                </div>
-            </div>
-
-            <div class="typing-container">
-                <div id="quote-display" class="quote-display">
-                    <!-- Quote characters will be injected here -->
-                </div>
-                <textarea id="typing-input" class="typing-input" placeholder="Type here..." autofocus></textarea>
-            </div>
-            
-            <button id="reset-button" class="reset-btn" title="Press Tab to restart">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M23 4v6h-6"></path>
-                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
-                </svg>
-                Restart
-            </button>
-        </div>
-
-        <footer>
-            <p>tab to restart</p>
-        </footer>
-
-        <!-- Result Modal -->
-        <div id="result-modal" class="modal-overlay">
-            <div class="modal-content">
-                <h2>Result</h2>
-                <div class="modal-stats">
-                    <div class="modal-stat">
-                        <span class="label">WPM</span>
-                        <span id="modal-wpm" class="value">0</span>
-                    </div>
-                    <div class="modal-stat">
-                        <span class="label">Accuracy</span>
-                        <span id="modal-accuracy" class="value">0%</span>
-                    </div>
-                </div>
-                
-                <div class="chart-container">
-                    <h3>Progress (Last 10 Games)</h3>
-                    <svg id="progress-chart" width="100%" height="100" viewBox="0 0 300 100" preserveAspectRatio="none">
-                        <!-- Chart line will be injected here -->
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta
+            name="description"
+            content="TypeSpeed: a browser typing trainer with timed and word-count modes, a code category, and ghost replay of your best run."
+        />
+        <title>TypeSpeed</title>
+        <link
+            rel="icon"
+            href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230f172a'/%3E%3Ctext x='16' y='23' font-size='20' font-family='monospace' font-weight='700' text-anchor='middle' fill='%23818cf8'%3ET%3C/text%3E%3C/svg%3E"
+        />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;600;700&display=swap"
+            rel="stylesheet"
+        />
+        <link rel="stylesheet" href="style.css" />
+    </head>
+    <body>
+        <div class="background-glow"></div>
+        <div class="container">
+            <header>
+                <h1>TYPE<span class="accent">SPEED</span></h1>
+                <button
+                    id="settings-btn"
+                    class="icon-btn"
+                    title="Settings"
+                    aria-label="Settings"
+                    aria-haspopup="dialog"
+                >
+                    <svg
+                        width="24"
+                        height="24"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                    >
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path
+                            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+                        ></path>
                     </svg>
+                </button>
+            </header>
+
+            <div class="game-area">
+                <div id="stats-bar" class="stats">
+                    <div class="stat-item">
+                        <span class="label">Time</span>
+                        <span id="timer" class="value">60</span>
+                        <span class="unit">s</span>
+                    </div>
+                    <div class="stat-item primary">
+                        <span class="label">WPM</span>
+                        <span id="wpm" class="value">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="label">Accuracy</span>
+                        <span id="accuracy" class="value">100</span>
+                        <span class="unit">%</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="label">Mistakes</span>
+                        <span id="mistakes" class="value">0</span>
+                    </div>
+                    <div class="stat-item highlight">
+                        <span class="label">Best</span>
+                        <span id="high-score" class="value">0</span>
+                    </div>
                 </div>
 
-                <div class="modal-actions">
-                    <button id="share-btn" class="action-btn secondary">Share Result</button>
-                    <button id="play-again-btn" class="action-btn primary">Play Again</button>
+                <div class="controls">
+                    <div class="control-group left">
+                        <label for="category-select" class="visually-hidden">Text category</label>
+                        <select id="category-select" class="category-select">
+                            <option value="general">General</option>
+                            <option value="technology">Technology</option>
+                            <option value="code">Code Snippets</option>
+                        </select>
+                    </div>
+
+                    <div class="control-group right">
+                        <div id="mode-badges" class="mode-badges">
+                            <span class="badge" id="mode-badge">60s</span>
+                            <span class="badge hidden" id="ghost-badge">Ghost On</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="typing-container">
+                    <div id="quote-display" class="quote-display" aria-hidden="true"></div>
+                    <textarea
+                        id="typing-input"
+                        class="typing-input"
+                        aria-label="Type the text shown above"
+                        placeholder="Type here..."
+                        autocomplete="off"
+                        autocorrect="off"
+                        autocapitalize="off"
+                        spellcheck="false"
+                    ></textarea>
+                </div>
+
+                <button id="reset-button" class="reset-btn" title="Press Tab to restart">
+                    <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                    >
+                        <path d="M23 4v6h-6"></path>
+                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                    </svg>
+                    Restart
+                </button>
+            </div>
+
+            <footer>
+                <p>tab to restart</p>
+            </footer>
+
+            <!-- Result Modal -->
+            <div
+                id="result-modal"
+                class="modal-overlay"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="result-title"
+            >
+                <div class="modal-content">
+                    <h2 id="result-title">Result</h2>
+                    <div class="modal-stats">
+                        <div class="modal-stat">
+                            <span class="label">WPM</span>
+                            <span id="modal-wpm" class="value">0</span>
+                        </div>
+                        <div class="modal-stat">
+                            <span class="label">Accuracy</span>
+                            <span id="modal-accuracy" class="value">0%</span>
+                        </div>
+                    </div>
+
+                    <div class="chart-container hidden">
+                        <h3>Progress</h3>
+                        <svg
+                            id="progress-chart"
+                            width="100%"
+                            height="100"
+                            viewBox="0 0 300 100"
+                            preserveAspectRatio="none"
+                            aria-hidden="true"
+                        ></svg>
+                        <p id="chart-caption" class="chart-caption"></p>
+                    </div>
+
+                    <div class="modal-actions">
+                        <button id="share-btn" class="action-btn secondary">Share Result</button>
+                        <button id="play-again-btn" class="action-btn primary">Play Again</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Modal -->
+            <div
+                id="settings-modal"
+                class="modal-overlay"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="settings-title"
+            >
+                <div class="modal-content settings-content">
+                    <h2 id="settings-title">Settings</h2>
+
+                    <div class="setting-group">
+                        <span class="setting-label" id="mode-label">Game Mode</span>
+                        <div
+                            class="pill-selector"
+                            id="mode-selector"
+                            role="group"
+                            aria-labelledby="mode-label"
+                        >
+                            <button class="pill active" data-value="time">Time</button>
+                            <button class="pill" data-value="words">Words</button>
+                        </div>
+                    </div>
+
+                    <div class="setting-group" id="timer-setting">
+                        <span class="setting-label" id="duration-label">Duration</span>
+                        <div
+                            class="pill-selector"
+                            id="duration-selector"
+                            role="group"
+                            aria-labelledby="duration-label"
+                        >
+                            <button class="pill" data-value="15">15s</button>
+                            <button class="pill" data-value="30">30s</button>
+                            <button class="pill active" data-value="60">60s</button>
+                        </div>
+                    </div>
+
+                    <div class="setting-group hidden" id="word-count-setting">
+                        <span class="setting-label" id="word-count-label">Word Count</span>
+                        <div
+                            class="pill-selector"
+                            id="word-count-selector"
+                            role="group"
+                            aria-labelledby="word-count-label"
+                        >
+                            <button class="pill active" data-value="10">10</button>
+                            <button class="pill" data-value="25">25</button>
+                            <button class="pill" data-value="50">50</button>
+                        </div>
+                    </div>
+
+                    <div class="setting-group">
+                        <span class="setting-label" id="features-label">Features</span>
+                        <div class="toggles-list" role="group" aria-labelledby="features-label">
+                            <label class="toggle-label">
+                                <input type="checkbox" id="sound-toggle-settings" checked />
+                                <span class="toggle-custom"></span>
+                                Sound Effects
+                            </label>
+                            <label class="toggle-label">
+                                <input type="checkbox" id="hard-mode-toggle-settings" />
+                                <span class="toggle-custom"></span>
+                                Hard Mode (blur the text)
+                            </label>
+                            <label class="toggle-label">
+                                <input type="checkbox" id="ghost-mode-toggle" />
+                                <span class="toggle-custom"></span>
+                                Ghost Mode (replay your best run)
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="modal-actions">
+                        <button id="close-settings-btn" class="action-btn primary">Done</button>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Settings Modal -->
-        <div id="settings-modal" class="modal-overlay">
-            <div class="modal-content settings-content">
-                <h2>Settings</h2>
-                
-                <div class="setting-group">
-                    <label>Game Mode</label>
-                    <div class="pill-selector" id="mode-selector">
-                        <button class="pill active" data-value="time">Time</button>
-                        <button class="pill" data-value="words">Words</button>
-                    </div>
-                </div>
-
-                <div class="setting-group" id="timer-setting">
-                    <label>Duration</label>
-                    <div class="pill-selector" id="duration-selector">
-                        <button class="pill" data-value="15">15s</button>
-                        <button class="pill" data-value="30">30s</button>
-                        <button class="pill active" data-value="60">60s</button>
-                    </div>
-                </div>
-
-                <div class="setting-group hidden" id="word-count-setting">
-                    <label>Word Count</label>
-                    <div class="pill-selector" id="word-count-selector">
-                        <button class="pill active" data-value="10">10</button>
-                        <button class="pill" data-value="25">25</button>
-                        <button class="pill" data-value="50">50</button>
-                    </div>
-                </div>
-
-                <div class="setting-group">
-                    <label>Features</label>
-                    <div class="toggles-list">
-                        <label class="toggle-label">
-                            <input type="checkbox" id="sound-toggle-settings" checked>
-                            <span class="toggle-custom"></span>
-                            Sound Effects
-                        </label>
-                        <label class="toggle-label">
-                            <input type="checkbox" id="hard-mode-toggle-settings">
-                            <span class="toggle-custom"></span>
-                            Hard Mode
-                        </label>
-                        <label class="toggle-label">
-                            <input type="checkbox" id="ghost-mode-toggle">
-                            <span class="toggle-custom"></span>
-                            Ghost Mode
-                        </label>
-                    </div>
-                </div>
-
-                <div class="modal-actions">
-                    <button id="close-settings-btn" class="action-btn primary">Done</button>
-                </div>
-            </div>
-        </div>
-
-    </div>
-
-    <script src="script.js"></script>
-</body>
+        <script src="script.js"></script>
+    </body>
 </html>
