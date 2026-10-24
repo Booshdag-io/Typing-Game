@@ -28,7 +28,7 @@ Open `index.html` in a browser, or serve the folder with any static file server.
 - **Caps Lock warning**: a notice above the text while Caps Lock is on.
 - **Hard Mode**: blurs the characters you have already typed, so you cannot see your mistakes. The text ahead stays readable.
 - **Ghost Mode**: records the timing of your best run and replays its position as a second cursor while you type.
-- **Results**: a modal with your WPM and accuracy, a line chart of your last ten runs at the current settings once you have two or more, and a Share button. The shared text has the WPM, accuracy, settings, and a link to the site. On touch devices it opens the system share sheet; elsewhere it copies to the clipboard.
+- **Results**: a modal with your WPM and accuracy; raw WPM (all typed characters, right or wrong); correct and wrong character counts; elapsed time; whether the run set a new best for its settings, and the previous best; a line chart of WPM at the end of each second of the run; a line chart of your last ten runs at the current settings once you have two or more; and a Share button. The shared text has the WPM, accuracy, settings, and a link to the site. On touch devices it opens the system share sheet; elsewhere it copies to the clipboard.
 - **Sound**: short tones made with the Web Audio API for keypress, mistake, and completion. Can be turned off.
 - **Keyboard**: Tab restarts while you are typing. Escape closes a dialog. Opening Settings during a run abandons the run.
 - **Focus**: if the typing input loses focus, a hint appears over the text. Pressing a letter key moves focus back to the input.

@@ -26,6 +26,10 @@ const settingsModal = document.getElementById('settings-modal');
 const modalWpmElement = document.getElementById('modal-wpm');
 const modalAccuracyElement = document.getElementById('modal-accuracy');
 const modalSourceElement = document.getElementById('modal-source');
+const modalBestElement = document.getElementById('modal-best');
+const modalRawElement = document.getElementById('modal-raw');
+const modalCharsElement = document.getElementById('modal-chars');
+const modalTimeElement = document.getElementById('modal-time');
 const shareBtn = document.getElementById('share-btn');
 const playAgainBtn = document.getElementById('play-again-btn');
 const settingsBtn = document.getElementById('settings-btn');
@@ -46,7 +50,10 @@ const stopOnErrorToggle = document.getElementById('stop-on-error-toggle');
 const capsWarning = document.getElementById('caps-warning');
 
 // Chart
-const chartContainer = document.querySelector('.chart-container');
+const chartContainer = document.getElementById('progress-chart-container');
+const runChartContainer = document.getElementById('run-chart-container');
+const runChart = document.getElementById('run-chart');
+const runChartCaption = document.getElementById('run-chart-caption');
 const chartCaption = document.getElementById('chart-caption');
 const progressChart = document.getElementById('progress-chart');
 
@@ -502,6 +509,8 @@ function endGame(endTime = Date.now()) {
     containerElement.classList.remove('focus-mode');
 
     const { wpm, accuracy } = updateMetrics();
+    const previousBest = currentBest();
+    let isNewBest = false;
 
     // Runs under a second have no meaningful WPM. Show them, but do not record them.
     if (elapsedMs() >= 1000) {
@@ -516,17 +525,18 @@ function endGame(endTime = Date.now()) {
         runHistory.length = Math.min(runHistory.length, HISTORY_LIMIT);
         saveJSON(STORAGE_KEYS.history, runHistory);
 
-        const best = currentBest();
-        if (wpm > (best ? best.wpm : 0)) {
+        if (wpm > (previousBest ? previousBest.wpm : 0)) {
             bests[key] = { wpm, keystrokes: runtime.ghostStrokes };
             saveJSON(STORAGE_KEYS.bests, bests);
+            isNewBest = true;
         }
     }
 
     playSound('success');
     updateHighScoreDisplay();
     renderChart();
-    showResultModal(wpm, accuracy);
+    renderRunChart();
+    showResultModal(wpm, accuracy, { isNewBest, previousBest });
 }
 
 function renderChart() {
@@ -539,6 +549,18 @@ function renderChart() {
     chartContainer.classList.toggle('hidden', data.length < 2);
     if (data.length < 2) return;
 
+    const { min, max } = drawLineChart(progressChart, data, true);
+
+    const label = data.length === 1 ? 'run' : 'runs';
+    chartCaption.textContent =
+        min === max
+            ? `Last ${data.length} ${label} at these settings, ${min} WPM`
+            : `Last ${data.length} ${label} at these settings, ${min} to ${max} WPM`;
+}
+
+// Draws numbers as a polyline in a 300x100 viewBox. Only numbers reach
+// innerHTML. Returns the range so callers can caption the chart.
+function drawLineChart(svg, data, withDots) {
     const width = 300;
     const height = 100;
     const pad = 6;
@@ -549,14 +571,37 @@ function renderChart() {
     const y = (v) => pad + (1 - (v - min) / range) * (height - 2 * pad);
 
     const points = data.map((v, i) => `${x(i)},${y(v)}`).join(' ');
-    const circles = data.map((v, i) => `<circle cx="${x(i)}" cy="${y(v)}" r="3" />`).join('');
-    progressChart.innerHTML = `<polyline points="${points}" />${circles}`;
+    const circles = withDots
+        ? data.map((v, i) => `<circle cx="${x(i)}" cy="${y(v)}" r="3" />`).join('')
+        : '';
+    svg.innerHTML = `<polyline points="${points}" />${circles}`;
+    return { min, max };
+}
 
-    const label = data.length === 1 ? 'run' : 'runs';
-    chartCaption.textContent =
-        min === max
-            ? `Last ${data.length} ${label} at these settings, ${min} WPM`
-            : `Last ${data.length} ${label} at these settings, ${min} to ${max} WPM`;
+// WPM at the end of each whole second, from the recorded input events.
+// Counts every typed character, right or wrong.
+function wpmBySecond() {
+    const seconds = Math.floor(elapsedMs() / 1000);
+    const strokes = runtime.ghostStrokes;
+    const points = [];
+    let k = 0;
+    let index = 0;
+    for (let s = 1; s <= seconds; s++) {
+        while (k < strokes.length && strokes[k].t <= s * 1000) {
+            index = strokes[k].i;
+            k++;
+        }
+        points.push(Math.round(index / 5 / (s / 60)));
+    }
+    return points;
+}
+
+function renderRunChart() {
+    const data = wpmBySecond();
+    runChartContainer.classList.toggle('hidden', data.length < 2);
+    if (data.length < 2) return;
+    const { max } = drawLineChart(runChart, data, false);
+    runChartCaption.textContent = `WPM by second, all typed characters. Peak ${max} WPM.`;
 }
 
 function resetGame() {
@@ -618,9 +663,27 @@ function focusInDialog(element) {
     }
 }
 
-function showResultModal(wpm, accuracy) {
+function showResultModal(wpm, accuracy, { isNewBest, previousBest }) {
+    const elapsed = elapsedMs();
+    const raw = elapsed >= 1000 ? Math.round(runtime.typedChars / 5 / (elapsed / 60000)) : 0;
+    const wrong = runtime.typedChars - runtime.correctChars;
     modalWpmElement.textContent = wpm;
     modalAccuracyElement.textContent = `${accuracy}%`;
+    modalRawElement.textContent = raw;
+    modalCharsElement.textContent = `${runtime.correctChars} correct, ${wrong} wrong`;
+    modalTimeElement.textContent = `${(elapsed / 1000).toFixed(1)}s`;
+    if (isNewBest) {
+        modalBestElement.textContent = previousBest
+            ? `New best for these settings. Previous best: ${previousBest.wpm} WPM.`
+            : 'First recorded run for these settings.';
+    } else if (elapsed < 1000) {
+        modalBestElement.textContent = 'Runs under one second are not recorded.';
+    } else if (!previousBest) {
+        modalBestElement.textContent = 'No recorded best for these settings yet.';
+    } else {
+        modalBestElement.textContent = `Best for these settings: ${previousBest.wpm} WPM.`;
+    }
+    modalBestElement.classList.toggle('new-best', isNewBest && Boolean(previousBest));
     modalSourceElement.textContent = runtime.quoteSource;
     modalSourceElement.classList.toggle('hidden', !runtime.quoteSource);
     resultModal.classList.add('show');

@@ -245,7 +245,7 @@ test.describe('settings dialog', () => {
         await expect(page.locator('#result-modal')).toHaveClass(/show/);
         await expect(page.locator('#play-again-btn')).toBeFocused();
         await expect(input(page)).toBeDisabled();
-        await expect(page.locator('.chart-container')).toBeHidden();
+        await expect(page.locator('#progress-chart-container')).toBeHidden();
 
         const history = await page.evaluate(() =>
             JSON.parse(localStorage.getItem('typingGameHistory'))
@@ -258,7 +258,7 @@ test.describe('settings dialog', () => {
         await page.keyboard.press('Enter');
         await expect(input(page)).toBeFocused();
         await input(page).pressSequentially(await currentQuote(page), { delay: 40 });
-        await expect(page.locator('.chart-container')).toBeVisible();
+        await expect(page.locator('#progress-chart-container')).toBeVisible();
         await expect(page.locator('#chart-caption')).toHaveText(/^Last 2 runs/);
         await expect(page.locator('#progress-chart circle')).toHaveCount(2);
 
@@ -747,8 +747,12 @@ test.describe('text', () => {
             const texts = Array.from({ length: 5 }, () => getPassage().text).join(' ');
             return { texts, key: settingsKey() };
         });
-        expect(result.texts).toMatch(/^[A-Z]/);
+        // Each sentence starts with a capital, or with a number in its place.
+        for (const sentence of result.texts.split(/[.?] /)) {
+            expect(sentence).toMatch(/^[A-Z0-9]/);
+        }
         expect(result.texts).toMatch(/[.?]$/);
+        expect(result.texts).toMatch(/,/);
         expect(result.texts).toMatch(/\d/);
         expect(result.key).toBe('words:50w:common+punctuation+numbers');
 
@@ -866,4 +870,79 @@ test('mode and length can be changed from the main screen', async ({ page }) => 
     await page.locator('#quick-mode [data-value="time"]').focus();
     await page.keyboard.press('Enter');
     await expect(page.locator('#timer')).toHaveText('60');
+});
+
+test('the result dialog shows raw WPM, characters, time, the run chart, and a new best', async ({
+    page,
+}) => {
+    await page.addInitScript(() => {
+        localStorage.setItem('typingGameSettings', JSON.stringify({ mode: 'words' }));
+        localStorage.setItem(
+            'typingGameBests',
+            JSON.stringify({ 'words:10w:common': { wpm: 1, keystrokes: [] } })
+        );
+    });
+    await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+    await page.goto('/');
+    await page.clock.pauseAt(new Date('2026-01-01T00:00:10Z'));
+    const quote = await currentQuote(page);
+    const wrongKey = quote[1] === 'x' ? 'y' : 'x';
+
+    // One wrong character left in place, the rest typed over 30 seconds.
+    await input(page).press(quote[0]);
+    await input(page).press(wrongKey);
+    await page.clock.runFor(10_000);
+    await input(page).pressSequentially(quote.slice(2, 20));
+    await page.clock.runFor(20_000);
+    await input(page).pressSequentially(quote.slice(20));
+    await expect(page.locator('#result-modal')).toHaveClass(/show/);
+
+    const n = quote.length;
+    await expect(page.locator('#modal-time')).toHaveText('30.0s');
+    await expect(page.locator('#modal-chars')).toHaveText(`${n - 1} correct, 1 wrong`);
+    await expect(page.locator('#modal-raw')).toHaveText(String(Math.round(n / 5 / 0.5)));
+    await expect(page.locator('#modal-wpm')).toHaveText(String(Math.round((n - 1) / 5 / 0.5)));
+    await expect(page.locator('#modal-best')).toHaveText(
+        'New best for these settings. Previous best: 1 WPM.'
+    );
+    await expect(page.locator('#run-chart-container')).toBeVisible();
+    const segments = await page
+        .locator('#run-chart polyline')
+        .evaluate((line) => line.getAttribute('points').split(' ').length);
+    expect(segments).toBe(30);
+});
+
+test('the result dialog names the standing best when a run does not beat it', async ({ page }) => {
+    await page.addInitScript(() => {
+        localStorage.setItem('typingGameSettings', JSON.stringify({ mode: 'words' }));
+        localStorage.setItem(
+            'typingGameBests',
+            JSON.stringify({ 'words:10w:common': { wpm: 999, keystrokes: [] } })
+        );
+    });
+    await page.goto('/');
+    await input(page).pressSequentially(await currentQuote(page), { delay: 40 });
+    await expect(page.locator('#modal-best')).toHaveText('Best for these settings: 999 WPM.');
+    await expect(page.locator('#modal-best')).not.toHaveClass(/new-best/);
+});
+
+test('the result dialog is positioned against the viewport, not the page card', async ({
+    page,
+}) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.addInitScript(() => {
+        localStorage.setItem('typingGameSettings', JSON.stringify({ mode: 'words' }));
+        localStorage.setItem(
+            'typingGameHistory',
+            JSON.stringify([50, 40].map((wpm) => ({ wpm, accuracy: 100, key: 'words:10w:common' })))
+        );
+    });
+    await page.goto('/');
+    await input(page).pressSequentially(await currentQuote(page), { delay: 40 });
+    await expect(page.locator('#result-modal')).toHaveClass(/show/);
+
+    const overlay = await page.locator('#result-modal').boundingBox();
+    expect(overlay).toEqual({ x: 0, y: 0, width: 1280, height: 720 });
+    const title = await page.locator('#result-title').boundingBox();
+    expect(title.y).toBeGreaterThanOrEqual(0);
 });
