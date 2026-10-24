@@ -12,7 +12,12 @@ module.exports = [
             ecmaVersion: 2022,
             sourceType: 'script',
             // Declared in texts.js, which loads first.
-            globals: { ...globals.browser, COMMON_WORDS: 'readonly', QUOTES: 'readonly' },
+            globals: {
+                ...globals.browser,
+                COMMON_WORDS: 'readonly',
+                QUOTES: 'readonly',
+                CODE_SNIPPETS: 'readonly',
+            },
         },
         rules: {
             'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],

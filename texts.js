@@ -1,6 +1,6 @@
 /**
  * TypeSpeed text sources. Plain browser script, loaded before script.js,
- * which reads COMMON_WORDS and QUOTES.
+ * which reads COMMON_WORDS, QUOTES, and CODE_SNIPPETS.
  */
 
 // --- Common Words ---
@@ -375,16 +375,244 @@ const QUOTES = {
         },
         { text: 'Deleted code is debugged code.', source: '' },
     ],
-    code: [
-        { text: "function hello() { console.log('Hello World'); }", source: '' },
-        { text: 'const sum = (a, b) => a + b;', source: '' },
-        { text: 'if (input === expected) { return true; } else { return false; }', source: '' },
-        { text: "document.getElementById('root').innerHTML = '<div></div>';", source: '' },
-        { text: 'for (let i = 0; i < array.length; i++) { process(array[i]); }', source: '' },
-        { text: "import React, { useState } from 'react';", source: '' },
-        { text: "git commit -m 'Initial commit'", source: '' },
-        { text: 'border-radius: 8px; background-color: #f0f0f0;', source: '' },
-        { text: 'SELECT * FROM users WHERE id = 1;', source: '' },
-        { text: 'while (isAlive) { eat(); sleep(); code(); }', source: '' },
+};
+
+// --- Code Snippets ---
+// Language name to multi-line snippets for the Code Snippets category.
+// Indentation is spaces; lines are joined with \n.
+const CODE_SNIPPETS = {
+    javascript: [
+        [
+            'function debounce(fn, wait) {',
+            '    let timer;',
+            '    return (...args) => {',
+            '        clearTimeout(timer);',
+            '        timer = setTimeout(() => fn(...args), wait);',
+            '    };',
+            '}',
+        ],
+        [
+            'const counts = {};',
+            'for (const word of text.split(/\\s+/)) {',
+            '    counts[word] = (counts[word] || 0) + 1;',
+            '}',
+        ],
+        [
+            'async function loadUser(id) {',
+            '    const response = await fetch(`/api/users/${id}`);',
+            '    if (!response.ok) throw new Error(response.statusText);',
+            '    return response.json();',
+            '}',
+        ],
+        [
+            'const total = items',
+            '    .filter((item) => item.inStock)',
+            '    .map((item) => item.price * item.quantity)',
+            '    .reduce((sum, value) => sum + value, 0);',
+        ],
+        [
+            'class Stack {',
+            '    #items = [];',
+            '    push(item) {',
+            '        this.#items.push(item);',
+            '    }',
+            '    pop() {',
+            '        return this.#items.pop();',
+            '    }',
+            '}',
+        ],
+        [
+            "document.querySelector('#save').addEventListener('click', (event) => {",
+            '    event.preventDefault();',
+            "    localStorage.setItem('draft', editor.value);",
+            '});',
+        ],
+    ],
+    python: [
+        [
+            'def fibonacci(n):',
+            '    a, b = 0, 1',
+            '    for _ in range(n):',
+            '        a, b = b, a + b',
+            '    return a',
+        ],
+        [
+            'with open("data.csv", newline="") as handle:',
+            '    for row in csv.DictReader(handle):',
+            '        print(row["name"], row["email"])',
+        ],
+        [
+            'class Point:',
+            '    def __init__(self, x, y):',
+            '        self.x = x',
+            '        self.y = y',
+            '',
+            '    def __repr__(self):',
+            '        return f"Point({self.x}, {self.y})"',
+        ],
+        [
+            'squares = {n: n * n for n in range(10) if n % 2 == 0}',
+            'for key, value in sorted(squares.items()):',
+            '    print(f"{key}: {value}")',
+        ],
+        [
+            'try:',
+            '    port = int(os.environ.get("PORT", "8000"))',
+            'except ValueError:',
+            '    port = 8000',
+        ],
+        [
+            'def read_lines(path):',
+            '    with open(path) as handle:',
+            '        for line in handle:',
+            '            yield line.rstrip("\\n")',
+        ],
+    ],
+    go: [
+        [
+            'func sum(values []int) int {',
+            '    total := 0',
+            '    for _, v := range values {',
+            '        total += v',
+            '    }',
+            '    return total',
+            '}',
+        ],
+        [
+            'file, err := os.Open(path)',
+            'if err != nil {',
+            '    return err',
+            '}',
+            'defer file.Close()',
+        ],
+        [
+            'type User struct {',
+            '    ID    int    `json:"id"`',
+            '    Name  string `json:"name"`',
+            '    Email string `json:"email"`',
+            '}',
+        ],
+        [
+            'http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {',
+            '    w.WriteHeader(http.StatusOK)',
+            '    fmt.Fprintln(w, "ok")',
+            '})',
+        ],
+        [
+            'results := make(chan int)',
+            'go func() {',
+            '    defer close(results)',
+            '    for i := 0; i < 3; i++ {',
+            '        results <- i * i',
+            '    }',
+            '}()',
+        ],
+        [
+            'switch day {',
+            'case "Saturday", "Sunday":',
+            '    fmt.Println("weekend")',
+            'default:',
+            '    fmt.Println("weekday")',
+            '}',
+        ],
+    ],
+    rust: [
+        [
+            'fn largest(values: &[i32]) -> Option<i32> {',
+            '    let mut iter = values.iter();',
+            '    let first = *iter.next()?;',
+            '    Some(iter.fold(first, |max, &v| max.max(v)))',
+            '}',
+        ],
+        ['#[derive(Debug, Clone, PartialEq)]', 'struct Point {', '    x: f64,', '    y: f64,', '}'],
+        [
+            'match command.as_str() {',
+            '    "start" => server.start(),',
+            '    "stop" => server.stop(),',
+            '    other => eprintln!("unknown command: {other}"),',
+            '}',
+        ],
+        [
+            'let words: Vec<&str> = text',
+            '    .split_whitespace()',
+            '    .filter(|w| w.len() > 3)',
+            '    .collect();',
+        ],
+        [
+            'impl Drop for Connection {',
+            '    fn drop(&mut self) {',
+            '        println!("closing {}", self.address);',
+            '    }',
+            '}',
+        ],
+        [
+            'fn read_config(path: &str) -> std::io::Result<String> {',
+            '    let contents = std::fs::read_to_string(path)?;',
+            '    Ok(contents.trim().to_string())',
+            '}',
+        ],
+    ],
+    sql: [
+        [
+            'SELECT name, COUNT(*) AS orders',
+            'FROM customers',
+            'JOIN orders ON orders.customer_id = customers.id',
+            'GROUP BY name',
+            'ORDER BY orders DESC;',
+        ],
+        [
+            'CREATE TABLE users (',
+            '    id INTEGER PRIMARY KEY,',
+            '    email TEXT NOT NULL UNIQUE,',
+            '    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
+            ');',
+        ],
+        [
+            'UPDATE products',
+            'SET price = price * 1.1',
+            "WHERE category = 'books'",
+            '  AND price < 20;',
+        ],
+        [
+            'WITH recent AS (',
+            '    SELECT * FROM events',
+            "    WHERE created_at > NOW() - INTERVAL '7 days'",
+            ')',
+            'SELECT type, COUNT(*) FROM recent GROUP BY type;',
+        ],
+        [
+            'INSERT INTO tags (name)',
+            "VALUES ('rust'), ('go'), ('python')",
+            'ON CONFLICT (name) DO NOTHING;',
+        ],
+        [
+            'SELECT department, AVG(salary) AS average',
+            'FROM employees',
+            'GROUP BY department',
+            'HAVING AVG(salary) > 50000;',
+        ],
+    ],
+    shell: [
+        ['for file in *.log; do', '    gzip "$file"', 'done'],
+        ['if [ -z "$API_KEY" ]; then', '    echo "API_KEY is not set" >&2', '    exit 1', 'fi'],
+        [
+            'git checkout -b fix/login',
+            'git add -A',
+            'git commit -m "Fix login redirect"',
+            'git push -u origin fix/login',
+        ],
+        ['find . -name "*.tmp" -mtime +7 -print0 |', '    xargs -0 rm -f'],
+        [
+            'count=0',
+            'while read -r line; do',
+            '    count=$((count + 1))',
+            'done < input.txt',
+            'echo "$count lines"',
+        ],
+        [
+            'curl -s https://api.example.com/items |',
+            "    jq -r '.items[] | .name' |",
+            '    sort | uniq -c',
+        ],
     ],
 };

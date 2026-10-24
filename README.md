@@ -18,7 +18,7 @@ Open `index.html` in a browser, or serve the folder with any static file server.
   - Weak Keys: common words that contain the three letters you miss most often, by miss rate, among letters you have typed at least five times. Until there is enough data it uses all common words.
   - Quotes: 50 passages, most of them opening lines of public-domain books.
   - Technology: 50 quotes about programming and computing.
-  - Code Snippets: a mix of JavaScript, CSS, SQL, and shell lines.
+  - Code Snippets: 3 to 8 line snippets in JavaScript, Python, Go, Rust, SQL, or Shell, picked with a second menu that appears next to the category. Enter types a new line, shown in the text as a return arrow. With Skip indentation on (the default, in Settings), the leading spaces of each new line are filled in for you; they count toward neither WPM nor accuracy. In Words mode, whole snippets are used until there are at least that many words. Each language has its own best scores.
   - Custom Text: text you paste into Settings. Curly quotes and dashes are converted to plain ones, line breaks become spaces, and text past 2000 characters is dropped. Words mode repeats the text from the start when it has fewer words than the word count. Each custom text has its own best score, keyed by a hash of the text. Custom Text runs cannot be sent as challenge links.
 
   When the source of a passage is known, the result dialog shows it. Passages are in `texts.js`.

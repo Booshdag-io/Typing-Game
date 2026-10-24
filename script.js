@@ -66,6 +66,8 @@ const punctuationToggle = document.getElementById('punctuation-toggle');
 const numbersToggle = document.getElementById('numbers-toggle');
 const stopOnErrorToggle = document.getElementById('stop-on-error-toggle');
 const customTextInput = document.getElementById('custom-text');
+const autoIndentToggle = document.getElementById('auto-indent-toggle');
+const codeLanguageSelect = document.getElementById('code-language-select');
 const capsWarning = document.getElementById('caps-warning');
 const ghostStatus = document.getElementById('ghost-status');
 
@@ -118,6 +120,8 @@ const DEFAULT_SETTINGS = {
     hasNumbers: false, // common words only
     isStopOnError: false, // wrong keys do not advance the caret
     customText: '', // passage for the Custom Text category, already normalized
+    codeLanguage: 'javascript', // key of CODE_SNIPPETS (texts.js)
+    isAutoIndent: true, // fill in leading spaces after a new line in code
 };
 
 const CUSTOM_TEXT_LIMIT = 2000;
@@ -146,7 +150,8 @@ function textHash(text) {
     return hash.toString(36);
 }
 
-const CATEGORIES = ['common', 'weak', 'custom', ...Object.keys(QUOTES)];
+const CATEGORIES = ['common', 'weak', 'custom', 'code', ...Object.keys(QUOTES)];
+const CODE_LANGUAGES = Object.keys(CODE_SNIPPETS);
 
 function sanitizeSettings(saved) {
     const settings = { ...DEFAULT_SETTINGS };
@@ -155,6 +160,7 @@ function sanitizeSettings(saved) {
     if (DURATIONS.includes(saved.duration)) settings.duration = saved.duration;
     if (WORD_COUNTS.includes(saved.wordCount)) settings.wordCount = saved.wordCount;
     if (CATEGORIES.includes(saved.category)) settings.category = saved.category;
+    if (CODE_LANGUAGES.includes(saved.codeLanguage)) settings.codeLanguage = saved.codeLanguage;
     if (typeof saved.customText === 'string') {
         settings.customText = normalizeCustomText(saved.customText);
     }
@@ -165,6 +171,7 @@ function sanitizeSettings(saved) {
         'hasPunctuation',
         'hasNumbers',
         'isStopOnError',
+        'isAutoIndent',
     ]) {
         if (typeof saved[flag] === 'boolean') settings[flag] = saved[flag];
     }
@@ -197,6 +204,7 @@ const runtime = {
     weakKeys: [], // letters the Weak Keys category uses this run
     ghostIndex: 0, // character index the ghost has reached
     challenge: null, // decoded challenge link, kept across resets until a run uses it
+    indent: [], // per character of quoteText: true for indentation Skip indentation fills in
     ghostTimeouts: [],
 };
 
@@ -233,6 +241,7 @@ function settingsKey() {
     const length = gameState.mode === 'time' ? `${gameState.duration}s` : `${gameState.wordCount}w`;
     let category = gameState.category;
     if (category === 'custom') category = `custom-${textHash(gameState.customText)}`;
+    if (category === 'code') category = `code-${gameState.codeLanguage}`;
     if (category === 'common') {
         if (gameState.hasPunctuation) category += '+punctuation';
         if (gameState.hasNumbers) category += '+numbers';
@@ -395,6 +404,19 @@ function getPassage() {
         const count = gameState.mode === 'words' ? gameState.wordCount : COMMON_CHUNK;
         return { text: commonWords(count, wordsWithKeys(runtime.weakKeys)), source: '' };
     }
+    if (gameState.category === 'code') {
+        const snippets = CODE_SNIPPETS[gameState.codeLanguage];
+        if (gameState.mode !== 'words') return { text: pickQuote(snippets).join('\n'), source: '' };
+        // Words mode uses whole snippets until there are at least that many words.
+        const parts = [];
+        let words = 0;
+        while (words < gameState.wordCount) {
+            const snippet = pickQuote(snippets).join('\n');
+            parts.push(snippet);
+            words += snippet.split(/\s+/).filter(Boolean).length;
+        }
+        return { text: parts.join('\n'), source: '' };
+    }
     const custom = gameState.customText;
     if (gameState.category === 'custom' && custom) {
         if (gameState.mode !== 'words') return { text: custom, source: '' };
@@ -435,7 +457,9 @@ function renderNewQuote() {
     const fragment = document.createDocumentFragment();
     runtime.quoteText.split('').forEach((character) => {
         const span = document.createElement('span');
-        span.textContent = character;
+        // A new line shows as a return arrow, then breaks the line.
+        span.textContent = character === '\n' ? '\u21b5\n' : character;
+        if (character === '\n') span.className = 'newline';
         fragment.appendChild(span);
     });
     quoteDisplayElement.appendChild(fragment);
@@ -446,6 +470,17 @@ function renderNewQuote() {
     typingInputElement.value = '';
     typingInputElement.maxLength = runtime.quoteText.length;
     runtime.previousValue = '';
+
+    // Positions of leading spaces after a new line, which Skip indentation
+    // fills in for code.
+    runtime.indent = [];
+    if (gameState.category === 'code' && gameState.isAutoIndent) {
+        let lineStart = true;
+        for (const character of runtime.quoteText) {
+            lineStart = character === '\n' ? true : lineStart && character === ' ';
+            runtime.indent.push(lineStart && character === ' ');
+        }
+    }
 }
 
 // --- Core Logic ---
@@ -509,6 +544,17 @@ function handleInput() {
             typingInputElement.value = typed;
         }
     }
+    // Skip indentation: after a correct new line in code, fill in the next
+    // line's leading spaces. Setting the value does not fire an input event,
+    // so they are not keystrokes.
+    const atNewLine =
+        typed.length > 0 && typed[typed.length - 1] === '\n' && quote[typed.length - 1] === '\n';
+    if (inserted.length > 0 && atNewLine && runtime.indent[typed.length]) {
+        let end = typed.length;
+        while (runtime.indent[end]) end++;
+        typed += quote.slice(typed.length, end);
+        typingInputElement.value = typed;
+    }
     runtime.previousValue = typed;
 
     runtime.ghostStrokes.push({
@@ -516,11 +562,17 @@ function handleInput() {
         i: runtime.quoteBase + typed.length,
     });
 
+    // Filled-in indentation shows as typed but counts toward neither WPM
+    // nor accuracy.
     let correctCount = 0;
+    let filled = 0;
     spans.forEach((span, index) => {
         span.classList.remove('correct', 'incorrect', 'current');
         if (index >= typed.length) return;
-        if (typed[index] === quote[index]) {
+        if (runtime.indent[index] && typed[index] === quote[index]) {
+            span.classList.add('correct');
+            filled++;
+        } else if (typed[index] === quote[index]) {
             span.classList.add('correct');
             correctCount++;
         } else {
@@ -531,15 +583,16 @@ function handleInput() {
 
     updateGhostStatus();
 
+    const countedTyped = typed.length - filled;
     runtime.correctChars = runtime.baseCorrect + correctCount;
-    runtime.typedChars = runtime.baseTyped + typed.length;
+    runtime.typedChars = runtime.baseTyped + countedTyped;
     updateMetrics();
 
     if (typed.length === quote.length) {
         if (gameState.mode === 'time') {
             // Keep going until the clock runs out.
             runtime.baseCorrect += correctCount;
-            runtime.baseTyped += typed.length;
+            runtime.baseTyped += countedTyped;
             runtime.quoteBase += quote.length;
             renderNewQuote();
         } else {
@@ -828,6 +881,7 @@ function updateQuickBar() {
     quickDuration.classList.toggle('hidden', gameState.mode !== 'time');
     quickWordCount.classList.toggle('hidden', gameState.mode !== 'words');
     ghostBadge.classList.toggle('hidden', !gameState.isGhostEnabled);
+    codeLanguageSelect.classList.toggle('hidden', gameState.category !== 'code');
 
     const weak = runtime.weakKeys;
     const noCustomText = gameState.category === 'custom' && !gameState.customText;
@@ -959,6 +1013,8 @@ const CHALLENGE_SETTINGS = [
     'category',
     'hasPunctuation',
     'hasNumbers',
+
+    'codeLanguage',
 ];
 
 function toBase64Url(bytes) {
@@ -1143,6 +1199,8 @@ function applySettingsToUI() {
     punctuationToggle.checked = gameState.hasPunctuation;
     numbersToggle.checked = gameState.hasNumbers;
     stopOnErrorToggle.checked = gameState.isStopOnError;
+    autoIndentToggle.checked = gameState.isAutoIndent;
+    codeLanguageSelect.value = gameState.codeLanguage;
     customTextInput.value = gameState.customText;
     quoteDisplayElement.classList.toggle('blurred', gameState.isHardMode);
 }
@@ -1202,10 +1260,15 @@ function handleQuickPillClick(e, group) {
 function describeKey(key) {
     const [mode, length, category = ''] = String(key).split(':');
     const [base, ...extras] = category.split('+');
-    const value = base.startsWith('custom-') ? 'custom' : base;
+    const value = base.replace(/-.*$/, '');
     const option = categorySelect.querySelector(`option[value="${CSS.escape(value)}"]`);
     const lengthLabel = mode === 'words' ? `${parseInt(length, 10)} words` : length;
-    return [lengthLabel, option ? option.textContent : base, ...extras].join(', ');
+    let label = option ? option.textContent : base;
+    const language = value === 'code' && base.slice(5);
+    const languageOption =
+        language && codeLanguageSelect.querySelector(`option[value="${CSS.escape(language)}"]`);
+    if (languageOption) label += ` (${languageOption.textContent})`;
+    return [lengthLabel, label, ...extras].join(', ');
 }
 
 function tableRow(cells) {
@@ -1554,6 +1617,14 @@ function init() {
     });
     stopOnErrorToggle.addEventListener('change', (e) => {
         gameState.isStopOnError = e.target.checked;
+    });
+    autoIndentToggle.addEventListener('change', (e) => {
+        gameState.isAutoIndent = e.target.checked;
+    });
+    codeLanguageSelect.addEventListener('change', (e) => {
+        gameState.codeLanguage = e.target.value;
+        saveSettings();
+        resetGame();
     });
 
     shareBtn.addEventListener('click', shareResult);

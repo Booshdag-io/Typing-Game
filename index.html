@@ -115,6 +115,17 @@
                             <option value="code">Code Snippets</option>
                             <option value="custom">Custom Text</option>
                         </select>
+                        <label for="code-language-select" class="visually-hidden">
+                            Code language
+                        </label>
+                        <select id="code-language-select" class="category-select hidden">
+                            <option value="javascript">JavaScript</option>
+                            <option value="python">Python</option>
+                            <option value="go">Go</option>
+                            <option value="rust">Rust</option>
+                            <option value="sql">SQL</option>
+                            <option value="shell">Shell</option>
+                        </select>
                         <p id="practice-note" class="practice-note hidden"></p>
                     </div>
 
@@ -378,6 +389,11 @@
                             <input type="checkbox" id="stop-on-error-toggle" />
                             <span class="toggle-custom"></span>
                             Stop on error (fix each mistake before moving on)
+                        </label>
+                        <label class="toggle-label">
+                            <input type="checkbox" id="auto-indent-toggle" checked />
+                            <span class="toggle-custom"></span>
+                            Skip indentation in code (fill in leading spaces after a new line)
                         </label>
                     </div>
                 </div>

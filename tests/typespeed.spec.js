@@ -2,7 +2,7 @@
 // browser, where script.js's top-level consts are in scope.
 /* global runtime, gameState, resultModal, typingInputElement, wpmElement, updateMetrics,
    getPassage, settingsKey, COMMON_WORDS, QUOTES, renderNewQuote, parseChallenge,
-   decodeChallenge, encodeChallenge, normalizeCustomText */
+   decodeChallenge, encodeChallenge, normalizeCustomText, CODE_SNIPPETS */
 
 const { test, expect } = require('@playwright/test');
 const { default: AxeBuilder } = require('@axe-core/playwright');
@@ -1455,5 +1455,107 @@ test.describe('custom text', () => {
             return !typingInputElement.dispatchEvent(paste);
         });
         expect(blocked).toBe(true);
+    });
+});
+
+test.describe('code snippets', () => {
+    // Shows a snippet that has an indented line. Each attempt forces a
+    // different snippet index; the second value keeps pickQuote from looping
+    // when the forced index is the one already shown.
+    const indentedSnippet = (page) =>
+        page.evaluate(() => {
+            const count = CODE_SNIPPETS[gameState.codeLanguage].length;
+            for (let k = 0; k < count; k++) {
+                const values = [(k + 0.5) / count, ((k + 1.5) % count) / count];
+                runtime.random = () => values.shift() ?? 0.5;
+                renderNewQuote();
+                if (/\n +/.test(runtime.quoteText)) return runtime.quoteText;
+            }
+            return null;
+        });
+
+    const throughFirstIndentedLine = (text) => {
+        const lines = text.split('\n');
+        const last = lines.findIndex((line, n) => n > 0 && line.startsWith(' '));
+        return lines.slice(0, last + 1).join('\n');
+    };
+
+    // Types the passage key by key, as a person would: Enter for new lines,
+    // and no leading spaces when the page fills them in.
+    const typeCode = async (page, text, { skipIndent }) => {
+        let lineStart = false;
+        for (const character of text) {
+            if (character === '\n') {
+                await input(page).press('Enter');
+                lineStart = true;
+                continue;
+            }
+            if (skipIndent && lineStart && character === ' ') continue;
+            lineStart = false;
+            await input(page).press(character === ' ' ? 'Space' : character);
+        }
+    };
+
+    test('a language menu appears and each language keeps its own best', async ({ page }) => {
+        await page.goto('/');
+        await expect(page.locator('#code-language-select')).toBeHidden();
+        await page.locator('#category-select').selectOption('code');
+        await expect(page.locator('#code-language-select')).toBeVisible();
+        await page.locator('#code-language-select').selectOption('python');
+
+        const quote = await currentQuote(page);
+        expect(quote).toContain('\n');
+        const snippets = await page.evaluate(() => CODE_SNIPPETS.python.map((s) => s.join('\n')));
+        expect(snippets).toContain(quote);
+        expect(await page.evaluate(() => settingsKey())).toBe('time:60s:code-python');
+        await expect(page.locator('#quote-display .newline').first()).toHaveText('\u21b5\n');
+
+        await page.reload();
+        await expect(page.locator('#code-language-select')).toHaveValue('python');
+    });
+
+    test('Enter types a new line and indentation is filled in without counting', async ({
+        page,
+    }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem(
+                'typingGameSettings',
+                JSON.stringify({ category: 'code', codeLanguage: 'python' })
+            );
+        });
+        await page.goto('/');
+        const quote = await indentedSnippet(page);
+        const firstLines = throughFirstIndentedLine(quote);
+        await typeCode(page, firstLines, { skipIndent: true });
+        await expect(input(page)).toHaveValue(firstLines);
+
+        const indentation = firstLines
+            .split('\n')
+            .slice(1)
+            .reduce((sum, line) => sum + line.match(/^ */)[0].length, 0);
+        const counts = await page.evaluate(() => [
+            runtime.keystrokes,
+            runtime.correctChars,
+            runtime.typedChars,
+        ]);
+        const typedByHand = firstLines.length - indentation;
+        expect(counts).toEqual([typedByHand, typedByHand, typedByHand]);
+        await expect(page.locator('#quote-display .incorrect')).toHaveCount(0);
+    });
+
+    test('with Skip indentation off, the spaces have to be typed', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem(
+                'typingGameSettings',
+                JSON.stringify({ category: 'code', codeLanguage: 'python', isAutoIndent: false })
+            );
+        });
+        await page.goto('/');
+        await expect(page.locator('#auto-indent-toggle')).not.toBeChecked();
+        const quote = await indentedSnippet(page);
+        const firstLines = throughFirstIndentedLine(quote);
+        await typeCode(page, firstLines, { skipIndent: false });
+        await expect(input(page)).toHaveValue(firstLines);
+        expect(await page.evaluate(() => runtime.typedChars)).toBe(firstLines.length);
     });
 });

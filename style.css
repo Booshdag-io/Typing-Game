@@ -383,6 +383,11 @@ input:checked + .toggle-custom::after {
     filter: blur(4px);
 }
 
+/* The return arrow that marks a new line in code */
+.newline {
+    color: var(--text-muted);
+}
+
 /* Text Effects */
 .correct {
     color: var(--text-main);
