@@ -1559,3 +1559,64 @@ test.describe('code snippets', () => {
         expect(await page.evaluate(() => runtime.typedChars)).toBe(firstLines.length);
     });
 });
+
+test.describe('themes', () => {
+    const contrastViolations = async (page, include) => {
+        let builder = new AxeBuilder({ page }).withRules(['color-contrast']);
+        if (include) builder = builder.include(include);
+        const results = await builder.analyze();
+        return results.violations.flatMap((v) => v.nodes.map((n) => n.target.join(' ')));
+    };
+
+    for (const theme of ['dark', 'light', 'contrast']) {
+        test(`${theme} passes the contrast check on the main screen and in Settings`, async ({
+            page,
+        }) => {
+            await page.emulateMedia({ reducedMotion: 'reduce' });
+            await page.addInitScript((value) => {
+                localStorage.setItem('typingGameSettings', JSON.stringify({ theme: value }));
+            }, theme);
+            await page.goto('/');
+            await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+            expect(await contrastViolations(page)).toEqual([]);
+
+            // Correct, wrong, and current characters. Focus mode dims the rest
+            // of the page on purpose during a run, so only the text is checked.
+            const quote = await currentQuote(page);
+            await input(page).pressSequentially(quote.slice(0, 3));
+            await input(page).press(quote[3] === 'x' ? 'y' : 'x');
+            expect(await contrastViolations(page, '.typing-container')).toEqual([]);
+            await page.keyboard.press('Tab');
+            await page.locator('#settings-btn').click();
+            expect(await contrastViolations(page)).toEqual([]);
+        });
+    }
+
+    test('the choice is saved and applied before the page script runs', async ({ page }) => {
+        await page.goto('/');
+        await page.locator('#settings-btn').click();
+        await page.locator('#theme-selector [data-value="light"]').click();
+        await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+        await page.keyboard.press('Escape');
+
+        // Block script.js: theme.js alone must apply the saved theme.
+        await page.route('**/script.js', (route) => route.abort());
+        await page.reload();
+        await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    });
+
+    test('System follows the OS color scheme and contrast settings', async ({
+        page,
+        browserName,
+    }) => {
+        await page.emulateMedia({ colorScheme: 'light' });
+        await page.goto('/');
+        await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+        await page.emulateMedia({ colorScheme: 'dark' });
+        await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+        // Playwright cannot emulate prefers-contrast in Firefox.
+        if (browserName === 'firefox') return;
+        await page.emulateMedia({ contrast: 'more' });
+        await expect(page.locator('html')).toHaveAttribute('data-theme', 'contrast');
+    });
+});

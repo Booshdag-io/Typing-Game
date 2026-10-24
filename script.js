@@ -57,6 +57,7 @@ const closeStatsBtn = document.getElementById('close-stats-btn');
 const modeSelector = document.getElementById('mode-selector');
 const durationSelector = document.getElementById('duration-selector');
 const wordCountSelector = document.getElementById('word-count-selector');
+const themeSelector = document.getElementById('theme-selector');
 const timerSettingGroup = document.getElementById('timer-setting');
 const wordCountSettingGroup = document.getElementById('word-count-setting');
 const soundToggle = document.getElementById('sound-toggle-settings');
@@ -122,7 +123,10 @@ const DEFAULT_SETTINGS = {
     customText: '', // passage for the Custom Text category, already normalized
     codeLanguage: 'javascript', // key of CODE_SNIPPETS (texts.js)
     isAutoIndent: true, // fill in leading spaces after a new line in code
+    theme: 'system', // 'system', 'dark', 'light', or 'contrast'
 };
+
+const THEMES = ['system', 'dark', 'light', 'contrast'];
 
 const CUSTOM_TEXT_LIMIT = 2000;
 
@@ -161,6 +165,7 @@ function sanitizeSettings(saved) {
     if (WORD_COUNTS.includes(saved.wordCount)) settings.wordCount = saved.wordCount;
     if (CATEGORIES.includes(saved.category)) settings.category = saved.category;
     if (CODE_LANGUAGES.includes(saved.codeLanguage)) settings.codeLanguage = saved.codeLanguage;
+    if (THEMES.includes(saved.theme)) settings.theme = saved.theme;
     if (typeof saved.customText === 'string') {
         settings.customText = normalizeCustomText(saved.customText);
     }
@@ -1190,6 +1195,7 @@ function applySettingsToUI() {
     setActivePill(modeSelector, gameState.mode);
     setActivePill(durationSelector, String(gameState.duration));
     setActivePill(wordCountSelector, String(gameState.wordCount));
+    setActivePill(themeSelector, gameState.theme);
     timerSettingGroup.classList.toggle('hidden', gameState.mode !== 'time');
     wordCountSettingGroup.classList.toggle('hidden', gameState.mode !== 'words');
     categorySelect.value = gameState.category;
@@ -1225,8 +1231,25 @@ function closeSettings() {
     resetGame();
 }
 
+// --- Theme ---
+const prefersLight = window.matchMedia('(prefers-color-scheme: light)');
+const prefersContrast = window.matchMedia('(prefers-contrast: more)');
+
+// Same rules as theme.js, which runs before the first paint.
+function applyTheme() {
+    let theme = gameState.theme;
+    if (theme === 'system') {
+        if (prefersContrast.matches) theme = 'contrast';
+        else theme = prefersLight.matches ? 'light' : 'dark';
+    }
+    document.documentElement.dataset.theme = theme;
+}
+
 function applyPill(group, value) {
-    if (group === 'mode') {
+    if (group === 'theme') {
+        gameState.theme = THEMES.includes(value) ? value : 'system';
+        applyTheme();
+    } else if (group === 'mode') {
         gameState.mode = value === 'words' ? 'words' : 'time';
     } else if (group === 'duration') {
         gameState.duration = parseInt(value, 10);
@@ -1558,6 +1581,7 @@ function handleKeydown(e) {
 
 // --- Init ---
 function init() {
+    applyTheme();
     applySettingsToUI();
     updateHighScoreDisplay();
 
@@ -1589,6 +1613,9 @@ function init() {
     modeSelector.addEventListener('click', (e) => handlePillClick(e, 'mode'));
     durationSelector.addEventListener('click', (e) => handlePillClick(e, 'duration'));
     wordCountSelector.addEventListener('click', (e) => handlePillClick(e, 'wordCount'));
+    themeSelector.addEventListener('click', (e) => handlePillClick(e, 'theme'));
+    prefersLight.addEventListener('change', applyTheme);
+    prefersContrast.addEventListener('change', applyTheme);
     quickMode.addEventListener('click', (e) => handleQuickPillClick(e, 'mode'));
     quickDuration.addEventListener('click', (e) => handleQuickPillClick(e, 'duration'));
     quickWordCount.addEventListener('click', (e) => handleQuickPillClick(e, 'wordCount'));

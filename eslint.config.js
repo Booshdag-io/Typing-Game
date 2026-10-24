@@ -24,7 +24,7 @@ module.exports = [
         },
     },
     {
-        files: ['texts.js'],
+        files: ['texts.js', 'theme.js'],
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: 'script',

@@ -45,11 +45,108 @@
     --color-error: #f87171;
     --color-warning: #fbbf24;
 
+    /* Surfaces and overlays */
+    --surface-sunken: rgba(15, 23, 42, 0.3);
+    --sunken-1: rgba(0, 0, 0, 0.1);
+    --sunken-2: rgba(0, 0, 0, 0.2);
+    --tint-1: rgba(255, 255, 255, 0.05);
+    --tint-2: rgba(255, 255, 255, 0.1);
+    --select-bg: rgba(30, 41, 59, 0.9);
+    --text-strong: #ffffff;
+    --on-accent: #ffffff;
+    --on-warning: #0f172a;
+    --glow-correct: rgba(255, 255, 255, 0.2);
+    --glow-error: rgba(248, 113, 113, 0.3);
+    --current-bg: rgba(45, 212, 191, 0.15);
+    --scrim: rgba(15, 23, 42, 0.75);
+    --scrim-strong: rgba(15, 23, 42, 0.8);
+    --ghost-fill: rgba(255, 255, 255, 0.3);
+    --ghost-border: rgba(255, 255, 255, 0.5);
+    color-scheme: dark;
+
     /* Effects */
     --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
     --radius-lg: 24px;
     --radius-md: 12px;
     --radius-sm: 6px;
+}
+
+/* Themes. data-theme is set on <html> by theme.js before the first paint
+   and by applyTheme() in script.js after that. Dark is the default above. */
+:root[data-theme='light'] {
+    --bg-dark: #f1f5f9;
+    --bg-gradient-1: #e0e7ff;
+    --bg-gradient-2: #c7d2fe;
+    --glass-bg: rgba(255, 255, 255, 0.88);
+    --glass-border: rgba(15, 23, 42, 0.14);
+    --glass-highlight: rgba(15, 23, 42, 0.04);
+    --text-main: #0f172a;
+    --text-muted: #475569;
+    --text-ghost: #556479;
+    --accent-primary: #4f46e5;
+    --accent-glow: rgba(79, 70, 229, 0.3);
+    --accent-secondary: #0f766e;
+    --accent-strong: #4f46e5;
+    --accent-strong-hover: #4338ca;
+    --color-success: #047857;
+    --color-error: #b91c1c;
+    --color-warning: #fbbf24;
+    --surface-sunken: rgba(241, 245, 249, 0.7);
+    --sunken-1: rgba(15, 23, 42, 0.04);
+    --sunken-2: rgba(15, 23, 42, 0.06);
+    --tint-1: rgba(15, 23, 42, 0.05);
+    --tint-2: rgba(15, 23, 42, 0.1);
+    --select-bg: #ffffff;
+    --text-strong: #0f172a;
+    --on-accent: #ffffff;
+    --on-warning: #0f172a;
+    --glow-correct: transparent;
+    --glow-error: transparent;
+    --current-bg: rgba(15, 118, 110, 0.12);
+    --scrim: rgba(241, 245, 249, 0.85);
+    --scrim-strong: rgba(226, 232, 240, 0.85);
+    --ghost-fill: rgba(15, 23, 42, 0.35);
+    --ghost-border: rgba(15, 23, 42, 0.6);
+    --shadow-glass: 0 8px 32px 0 rgba(15, 23, 42, 0.12);
+    color-scheme: light;
+}
+
+:root[data-theme='contrast'] {
+    --bg-dark: #000000;
+    --bg-gradient-1: #000000;
+    --bg-gradient-2: #000000;
+    --glass-bg: #000000;
+    --glass-border: #ffffff;
+    --glass-highlight: rgba(255, 255, 255, 0.1);
+    --text-main: #ffffff;
+    --text-muted: #e5e5e5;
+    --text-ghost: #c8c8c8;
+    --accent-primary: #ffd400;
+    --accent-glow: transparent;
+    --accent-secondary: #00e5ff;
+    --accent-strong: #ffd400;
+    --accent-strong-hover: #ffe766;
+    --color-success: #00ff7f;
+    --color-error: #ff6b6b;
+    --color-warning: #ffd400;
+    --surface-sunken: #000000;
+    --sunken-1: #000000;
+    --sunken-2: #000000;
+    --tint-1: rgba(255, 255, 255, 0.12);
+    --tint-2: rgba(255, 255, 255, 0.25);
+    --select-bg: #000000;
+    --text-strong: #ffffff;
+    --on-accent: #000000;
+    --on-warning: #000000;
+    --glow-correct: transparent;
+    --glow-error: transparent;
+    --current-bg: rgba(0, 229, 255, 0.25);
+    --scrim: rgba(0, 0, 0, 0.85);
+    --scrim-strong: rgba(0, 0, 0, 0.9);
+    --ghost-fill: rgba(255, 255, 255, 0.7);
+    --ghost-border: #ffffff;
+    --shadow-glass: none;
+    color-scheme: dark;
 }
 
 * {
@@ -194,7 +291,7 @@ header h1 .accent {
     gap: 1rem;
     margin-bottom: 2.5rem;
     padding: 1rem;
-    background: rgba(15, 23, 42, 0.3);
+    background: var(--surface-sunken);
     border-radius: var(--radius-md);
     border: 1px solid var(--glass-border);
 }
@@ -211,7 +308,7 @@ header h1 .accent {
 .stat-item.primary {
     background: var(--glass-highlight);
     border-radius: var(--radius-sm);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--tint-1);
 }
 
 .stat-item.highlight .value {
@@ -258,8 +355,8 @@ header h1 .accent {
 }
 
 .category-select {
-    background: rgba(30, 41, 59, 0.9);
-    color: #ffffff;
+    background: var(--select-bg);
+    color: var(--text-strong);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-sm);
     padding: 0.5rem 1rem;
@@ -279,7 +376,7 @@ header h1 .accent {
 }
 
 .category-select:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--tint-1);
     border-color: var(--text-muted);
 }
 
@@ -319,7 +416,7 @@ header h1 .accent {
 .toggle-custom {
     width: 36px;
     height: 20px;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--tint-2);
     border-radius: 20px;
     position: relative;
     transition: background 0.3s;
@@ -345,13 +442,13 @@ input:checked + .toggle-custom {
 
 input:checked + .toggle-custom::after {
     transform: translateX(16px);
-    background: #fff;
+    background: var(--on-accent);
 }
 
 /* Badges */
 .badge {
     font-size: 0.75rem;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--tint-2);
     padding: 0.25rem 0.5rem;
     border-radius: 4px;
     color: var(--text-muted);
@@ -391,7 +488,7 @@ input:checked + .toggle-custom::after {
 /* Text Effects */
 .correct {
     color: var(--text-main);
-    text-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+    text-shadow: 0 0 10px var(--glow-correct);
 }
 
 .incorrect {
@@ -399,12 +496,12 @@ input:checked + .toggle-custom::after {
     text-decoration: underline;
     text-decoration-style: wavy;
     text-decoration-color: var(--color-error);
-    text-shadow: 0 0 10px rgba(248, 113, 113, 0.3);
+    text-shadow: 0 0 10px var(--glow-error);
 }
 
 .current {
     color: var(--accent-secondary);
-    background: rgba(45, 212, 191, 0.15);
+    background: var(--current-bg);
     border-radius: 2px;
     position: relative;
 }
@@ -460,7 +557,7 @@ input:checked + .toggle-custom::after {
     padding: 0.2rem 0.6rem;
     font-size: 0.8rem;
     font-weight: 600;
-    color: var(--bg-dark);
+    color: var(--on-warning);
     background: var(--color-warning);
     border-radius: var(--radius-sm);
 }
@@ -474,7 +571,7 @@ input:checked + .toggle-custom::after {
     justify-content: center;
     font-size: 1rem;
     color: var(--text-main);
-    background: rgba(15, 23, 42, 0.75);
+    background: var(--scrim);
     border-radius: var(--radius-md);
     pointer-events: none; /* Clicks reach the input underneath */
     z-index: 6;
@@ -491,8 +588,8 @@ input:checked + .toggle-custom::after {
     left: 0;
     width: 2px;
     height: 1.5rem;
-    background-color: rgba(255, 255, 255, 0.3);
-    border: 1px dashed rgba(255, 255, 255, 0.5);
+    background-color: var(--ghost-fill);
+    border: 1px dashed var(--ghost-border);
     pointer-events: none;
     opacity: 0;
     transition: transform 0.1s linear; /* Smooth catch-up */
@@ -523,7 +620,7 @@ input:checked + .toggle-custom::after {
 }
 
 .reset-btn:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--tint-1);
     color: var(--text-main);
     border-color: var(--text-muted);
     transform: translateY(-1px);
@@ -594,7 +691,7 @@ footer {
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(15, 23, 42, 0.8);
+    background: var(--scrim-strong);
     backdrop-filter: blur(8px);
     display: flex;
     justify-content: center;
@@ -689,7 +786,7 @@ footer {
 
 .action-btn.primary {
     background: var(--accent-strong);
-    color: white;
+    color: var(--on-accent);
 }
 
 .action-btn.primary:hover {
@@ -705,7 +802,7 @@ footer {
 
 .action-btn.secondary:hover {
     border-color: var(--text-main);
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--tint-1);
 }
 
 /* Stats Modal */
@@ -770,7 +867,7 @@ footer {
     font-family: var(--font-code);
     font-size: 0.85rem;
     color: var(--text-main);
-    background: rgba(0, 0, 0, 0.2);
+    background: var(--sunken-2);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-sm);
 }
@@ -809,7 +906,7 @@ footer {
 
 .pill-selector {
     display: flex;
-    background: rgba(0, 0, 0, 0.2);
+    background: var(--sunken-2);
     padding: 4px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--glass-border);
@@ -928,7 +1025,7 @@ footer {
 
 .chart-container {
     padding: 0.75rem 1rem;
-    background: rgba(0, 0, 0, 0.1);
+    background: var(--sunken-1);
     border-radius: var(--radius-md);
 }
 

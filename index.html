@@ -24,6 +24,7 @@
             crossorigin
         />
         <link rel="stylesheet" href="style.css" />
+        <script src="theme.js"></script>
     </head>
     <body>
         <div class="background-glow"></div>
@@ -354,6 +355,25 @@
                         <button class="pill active" data-value="10" aria-pressed="true">10</button>
                         <button class="pill" data-value="25" aria-pressed="false">25</button>
                         <button class="pill" data-value="50" aria-pressed="false">50</button>
+                    </div>
+                </div>
+
+                <div class="setting-group">
+                    <span class="setting-label" id="theme-label">Theme</span>
+                    <div
+                        class="pill-selector"
+                        id="theme-selector"
+                        role="group"
+                        aria-labelledby="theme-label"
+                    >
+                        <button class="pill active" data-value="system" aria-pressed="true">
+                            System
+                        </button>
+                        <button class="pill" data-value="dark" aria-pressed="false">Dark</button>
+                        <button class="pill" data-value="light" aria-pressed="false">Light</button>
+                        <button class="pill" data-value="contrast" aria-pressed="false">
+                            High contrast
+                        </button>
                     </div>
                 </div>
 
