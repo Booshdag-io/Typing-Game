@@ -43,17 +43,17 @@ A settings key combines mode, length, and category, for example `time:60s:genera
 
 ```
 npm install
-npx playwright install chromium   # once, for the tests
+npx playwright install chromium firefox webkit   # once, for the tests
 
 npm run serve         # static server on http://127.0.0.1:8765, no caching
-npm test              # Playwright end-to-end tests in headless Chromium
+npm test              # Playwright end-to-end tests in Chromium, Firefox, and WebKit
 npm run lint          # ESLint
 npm run format:check  # Prettier
 npm run format        # Prettier, write mode
 npm run check         # lint, format check, and tests
 ```
 
-`index.html`, `script.js`, and `style.css` are the whole app. The script runs at load and expects to be the last tag in `<body>`. Tests live in `tests/` and drive the real page with keystrokes; they cover time and words mode, WPM and accuracy math, the dialogs' keyboard handling, reduced motion, paste blocking, clipboard sharing, Ghost Mode replay, and recovery from corrupt `localStorage`.
+`index.html`, `script.js`, and `style.css` are the whole app. The script runs at load and expects to be the last tag in `<body>`. Tests live in `tests/` and drive the real page with keystrokes in Chromium, Firefox, and WebKit. Each item under "What it does" has at least one test, as do recovery from corrupt `localStorage`, the contrast check, and the absence of requests to other sites.
 
 Each push to `main` runs lint, the format check, and the tests in GitHub Actions. If they pass, the same workflow publishes `index.html`, `script.js`, `style.css`, and `fonts/` to GitHub Pages; if they fail, the live site is not changed.
 

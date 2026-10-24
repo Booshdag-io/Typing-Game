@@ -583,6 +583,7 @@ function showResultModal(wpm, accuracy) {
     modalWpmElement.textContent = wpm;
     modalAccuracyElement.textContent = `${accuracy}%`;
     resultModal.classList.add('show');
+    updateFocusHint();
     focusInDialog(playAgainBtn);
 }
 
@@ -619,6 +620,7 @@ function openSettings() {
     if (runtime.isStarted) resetGame();
     typingInputElement.blur();
     settingsModal.classList.add('show');
+    updateFocusHint();
     focusInDialog(modeSelector.querySelector('.pill.active') || closeSettingsBtn);
 }
 

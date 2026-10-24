@@ -329,8 +329,14 @@ test('paste and drop are blocked', async ({ page }) => {
     expect(blocked).toEqual([true, true]);
 });
 
-test('share copies a summary to the clipboard', async ({ page, context }) => {
-    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+test('share copies a summary to the clipboard', async ({ page }) => {
+    // Firefox and WebKit cannot grant clipboard permissions to tests, so
+    // record what the page writes instead of reading the system clipboard.
+    await page.addInitScript(() => {
+        navigator.clipboard.writeText = async (text) => {
+            window.copiedText = text;
+        };
+    });
     await page.goto('/');
     await page.evaluate(() => {
         gameState.mode = 'words';
@@ -341,7 +347,7 @@ test('share copies a summary to the clipboard', async ({ page, context }) => {
 
     await page.locator('#share-btn').click();
     await expect(page.locator('#share-btn')).toHaveText('Copied!');
-    const clipboard = await page.evaluate(() => navigator.clipboard.readText());
+    const clipboard = await page.evaluate(() => window.copiedText);
     expect(clipboard).toMatch(/^\d+ WPM at \d+% accuracy on TypeSpeed$/);
     await expect(page.locator('#share-btn')).toHaveText('Share Result', { timeout: 3000 });
 });
@@ -599,4 +605,69 @@ test('hard mode blurs typed characters and leaves the rest readable', async ({ p
     await expect(spans.nth(2)).toHaveCSS('filter', 'blur(4px)');
     await expect(spans.nth(3)).toHaveCSS('filter', 'none');
     await expect(spans.nth(10)).toHaveCSS('filter', 'none');
+});
+
+test.describe('sound', () => {
+    // Counts AudioContexts and tones without making noise.
+    const stubAudio = () => {
+        window.audio = { contexts: 0, tones: 0 };
+        const param = {
+            setValueAtTime() {},
+            linearRampToValueAtTime() {},
+            exponentialRampToValueAtTime() {},
+        };
+        class FakeAudioContext {
+            constructor() {
+                window.audio.contexts++;
+                this.state = 'running';
+                this.currentTime = 0;
+                this.destination = {};
+            }
+            createOscillator() {
+                window.audio.tones++;
+                return { connect() {}, frequency: param, start() {}, stop() {} };
+            }
+            createGain() {
+                return { connect() {}, gain: param };
+            }
+            resume() {}
+        }
+        window.AudioContext = FakeAudioContext;
+        window.webkitAudioContext = FakeAudioContext;
+    };
+
+    test('creates the audio context on the first keystroke, not at load', async ({ page }) => {
+        await page.addInitScript(stubAudio);
+        await page.goto('/');
+        expect(await page.evaluate(() => window.audio)).toEqual({ contexts: 0, tones: 0 });
+
+        await input(page).press((await currentQuote(page))[0]);
+        expect(await page.evaluate(() => window.audio)).toEqual({ contexts: 1, tones: 1 });
+    });
+
+    test('plays nothing when turned off', async ({ page }) => {
+        await page.addInitScript(stubAudio);
+        await page.addInitScript(() => {
+            localStorage.setItem('typingGameSettings', JSON.stringify({ isSoundEnabled: false }));
+        });
+        await page.goto('/');
+        await input(page).pressSequentially((await currentQuote(page)).slice(0, 5));
+        expect(await page.evaluate(() => window.audio)).toEqual({ contexts: 0, tones: 0 });
+    });
+});
+
+test('feature toggles are saved and applied after a reload', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#settings-btn').click();
+    await page.locator('label', { hasText: 'Sound Effects' }).click();
+    await page.locator('label', { hasText: 'Hard Mode' }).click();
+    await page.locator('label', { hasText: 'Ghost Mode' }).click();
+    await page.locator('#close-settings-btn').click();
+
+    await page.reload();
+    await expect(page.locator('#sound-toggle-settings')).not.toBeChecked();
+    await expect(page.locator('#hard-mode-toggle-settings')).toBeChecked();
+    await expect(page.locator('#ghost-mode-toggle')).toBeChecked();
+    await expect(page.locator('#quote-display')).toHaveClass(/blurred/);
+    await expect(page.locator('#ghost-badge')).toBeVisible();
 });
