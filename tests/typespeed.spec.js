@@ -39,8 +39,7 @@ test.describe('loading', () => {
         await page.addInitScript(() => {
             localStorage.setItem('typingGameSettings', '{not json');
             localStorage.setItem('typingGameHistory', '"nope"');
-            localStorage.setItem('typingGameBestRun', '[]');
-            localStorage.setItem('typingGameHighScore', 'abc');
+            localStorage.setItem('typingGameBests', '[1, 2]');
         });
         const errors = collectErrors(page);
         await page.goto('/');
@@ -193,7 +192,8 @@ test.describe('settings dialog', () => {
         const quote = await currentQuote(page);
         expect(quote.split(' ')).toHaveLength(10);
 
-        await input(page).pressSequentially(quote);
+        // A delay keeps the run over one second, so it is recorded.
+        await input(page).pressSequentially(quote, { delay: 40 });
 
         await expect(page.locator('#result-modal')).toHaveClass(/show/);
         await expect(page.locator('#play-again-btn')).toBeFocused();
@@ -205,11 +205,12 @@ test.describe('settings dialog', () => {
         );
         expect(history).toHaveLength(1);
         expect(history[0].mode).toBe('words');
+        expect(history[0].key).toBe('words:10w:general');
 
         // A second run makes the chart appear.
         await page.keyboard.press('Enter');
         await expect(input(page)).toBeFocused();
-        await input(page).pressSequentially(await currentQuote(page));
+        await input(page).pressSequentially(await currentQuote(page), { delay: 40 });
         await expect(page.locator('.chart-container')).toBeVisible();
         await expect(page.locator('#chart-caption')).toHaveText(/^Last 2 runs/);
         await expect(page.locator('#progress-chart circle')).toHaveCount(2);
@@ -217,6 +218,52 @@ test.describe('settings dialog', () => {
         // Settings survive a reload.
         await page.reload();
         await expect(page.locator('#mode-badge')).toHaveText('10 words');
+    });
+});
+
+test.describe('best scores', () => {
+    test('are kept per mode, length, and category', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem(
+                'typingGameBests',
+                JSON.stringify({
+                    'time:60s:general': { wpm: 40, keystrokes: [] },
+                    'words:10w:general': { wpm: 70, keystrokes: [] },
+                })
+            );
+        });
+        await page.goto('/');
+        await expect(page.locator('#high-score')).toHaveText('40');
+
+        await page.locator('#settings-btn').click();
+        await page.keyboard.press('Tab');
+        await page.keyboard.press('Enter');
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#high-score')).toHaveText('70');
+
+        await page.locator('#category-select').selectOption('code');
+        await expect(page.locator('#high-score')).toHaveText('0');
+    });
+
+    test('runs under one second are shown but not recorded', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('typingGameSettings', JSON.stringify({ mode: 'words' }));
+        });
+        await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+        await page.goto('/');
+        // Freeze time so the whole run takes zero elapsed milliseconds,
+        // however slowly the machine types.
+        await page.clock.pauseAt(new Date('2026-01-01T00:00:10Z'));
+
+        await input(page).pressSequentially(await currentQuote(page));
+        await expect(page.locator('#result-modal')).toHaveClass(/show/);
+
+        const stored = await page.evaluate(() => [
+            localStorage.getItem('typingGameHistory'),
+            localStorage.getItem('typingGameBests'),
+        ]);
+        expect(stored).toEqual([null, null]);
+        await expect(page.locator('#high-score')).toHaveText('0');
     });
 });
 
@@ -249,12 +296,16 @@ test('share copies a summary to the clipboard', async ({ page, context }) => {
 
 test('restarting during a ghost replay cancels the pending moves', async ({ page }) => {
     await page.addInitScript(() => {
-        localStorage.setItem('typingGameHighScore', '40');
         localStorage.setItem(
-            'typingGameBestRun',
+            'typingGameBests',
             JSON.stringify({
-                wpm: 40,
-                keystrokes: Array.from({ length: 30 }, (_, i) => ({ t: 100 + i * 200, i: i + 1 })),
+                'time:60s:general': {
+                    wpm: 40,
+                    keystrokes: Array.from({ length: 30 }, (_, i) => ({
+                        t: 100 + i * 200,
+                        i: i + 1,
+                    })),
+                },
             })
         );
         localStorage.setItem('typingGameSettings', JSON.stringify({ isGhostEnabled: true }));

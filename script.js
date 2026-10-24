@@ -84,8 +84,7 @@ const QUOTES = {
 // --- Storage ---
 const STORAGE_KEYS = {
     history: 'typingGameHistory',
-    highScore: 'typingGameHighScore',
-    bestRun: 'typingGameBestRun',
+    bests: 'typingGameBests',
     settings: 'typingGameSettings',
 };
 
@@ -105,10 +104,6 @@ function saveJSON(key, value) {
     } catch (err) {
         console.warn(`Could not save ${key} to localStorage`, err);
     }
-}
-
-function readHighScore() {
-    return Number(localStorage.getItem(STORAGE_KEYS.highScore)) || 0;
 }
 
 // --- Game State ---
@@ -160,10 +155,27 @@ const runtime = {
     ghostTimeouts: [],
 };
 
+const HISTORY_LIMIT = 50;
+const CHART_POINTS = 10;
+
 let runHistory = loadJSON(STORAGE_KEYS.history, []);
 if (!Array.isArray(runHistory)) runHistory = [];
-let bestRun = loadJSON(STORAGE_KEYS.bestRun, null);
-if (!bestRun || !Array.isArray(bestRun.keystrokes)) bestRun = null;
+
+// Best run per settings combination: { [settingsKey]: { wpm, keystrokes } }.
+let bests = loadJSON(STORAGE_KEYS.bests, {});
+if (!bests || typeof bests !== 'object' || Array.isArray(bests)) bests = {};
+
+// Runs only compete with runs of the same mode, length, and category.
+function settingsKey() {
+    const length = gameState.mode === 'time' ? `${gameState.duration}s` : `${gameState.wordCount}w`;
+    return `${gameState.mode}:${length}:${gameState.category}`;
+}
+
+function currentBest() {
+    const best = bests[settingsKey()];
+    if (!best || typeof best.wpm !== 'number' || !Array.isArray(best.keystrokes)) return null;
+    return best;
+}
 
 // --- Audio ---
 // Created on first use so the browser does not warn about an AudioContext
@@ -365,7 +377,8 @@ function startGame() {
     timerElement.textContent = runtime.timer;
     runtime.interval = setInterval(tick, 250);
 
-    if (gameState.isGhostEnabled && bestRun) startGhostPlayback();
+    const best = currentBest();
+    if (gameState.isGhostEnabled && best) startGhostPlayback(best);
 }
 
 function tick() {
@@ -384,9 +397,9 @@ function tick() {
     updateMetrics();
 }
 
-function startGhostPlayback() {
+function startGhostPlayback(best) {
     if (!document.getElementById('ghost-cursor')) return;
-    runtime.ghostTimeouts = bestRun.keystrokes.map((stroke) =>
+    runtime.ghostTimeouts = best.keystrokes.map((stroke) =>
         setTimeout(() => {
             if (!runtime.isStarted) return;
             // Look everything up live: the quote (and its spans) may have
@@ -433,14 +446,24 @@ function endGame(endTime = Date.now()) {
 
     const { wpm, accuracy } = updateMetrics();
 
-    runHistory.unshift({ wpm, accuracy, date: new Date().toISOString(), mode: gameState.mode });
-    runHistory.length = Math.min(runHistory.length, 10);
-    saveJSON(STORAGE_KEYS.history, runHistory);
+    // Runs under a second have no meaningful WPM. Show them, but do not record them.
+    if (elapsedMs() >= 1000) {
+        const key = settingsKey();
+        runHistory.unshift({
+            wpm,
+            accuracy,
+            date: new Date().toISOString(),
+            mode: gameState.mode,
+            key,
+        });
+        runHistory.length = Math.min(runHistory.length, HISTORY_LIMIT);
+        saveJSON(STORAGE_KEYS.history, runHistory);
 
-    if (wpm > readHighScore()) {
-        localStorage.setItem(STORAGE_KEYS.highScore, String(wpm));
-        bestRun = { keystrokes: runtime.ghostStrokes, wpm };
-        saveJSON(STORAGE_KEYS.bestRun, bestRun);
+        const best = currentBest();
+        if (wpm > (best ? best.wpm : 0)) {
+            bests[key] = { wpm, keystrokes: runtime.ghostStrokes };
+            saveJSON(STORAGE_KEYS.bests, bests);
+        }
     }
 
     playSound('success');
@@ -450,7 +473,12 @@ function endGame(endTime = Date.now()) {
 }
 
 function renderChart() {
-    const data = runHistory.map((h) => h.wpm).reverse(); // oldest to newest
+    const key = settingsKey();
+    const data = runHistory
+        .filter((h) => h.key === key)
+        .slice(0, CHART_POINTS)
+        .map((h) => h.wpm)
+        .reverse(); // oldest to newest
     chartContainer.classList.toggle('hidden', data.length < 2);
     if (data.length < 2) return;
 
@@ -470,8 +498,8 @@ function renderChart() {
     const label = data.length === 1 ? 'run' : 'runs';
     chartCaption.textContent =
         min === max
-            ? `Last ${data.length} ${label}, ${min} WPM`
-            : `Last ${data.length} ${label}, ${min} to ${max} WPM`;
+            ? `Last ${data.length} ${label} at these settings, ${min} WPM`
+            : `Last ${data.length} ${label} at these settings, ${min} to ${max} WPM`;
 }
 
 function resetGame() {
@@ -504,6 +532,7 @@ function resetGame() {
     settingsModal.classList.remove('show');
 
     updateBadges();
+    updateHighScoreDisplay();
     renderNewQuote();
     typingInputElement.focus();
 }
@@ -515,7 +544,8 @@ function updateBadges() {
 }
 
 function updateHighScoreDisplay() {
-    highScoreElement.textContent = readHighScore();
+    const best = currentBest();
+    highScoreElement.textContent = best ? best.wpm : 0;
 }
 
 // Focus an element inside a dialog that was shown in this same tick. If the
