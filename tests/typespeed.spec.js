@@ -14,6 +14,8 @@ const currentQuote = (page) => page.evaluate(() => runtime.quoteText);
 function collectErrors(page) {
     const errors = [];
     page.on('console', (message) => {
+        // Playwright logs this itself when the config blocks service workers.
+        if (message.text() === 'Service Worker registration blocked by Playwright') return;
         if (message.type() === 'error' || message.type() === 'warning') {
             errors.push(message.text());
         }
@@ -1619,4 +1621,45 @@ test.describe('themes', () => {
         await page.emulateMedia({ contrast: 'more' });
         await expect(page.locator('html')).toHaveAttribute('data-theme', 'contrast');
     });
+});
+
+test('works offline after one visit', async ({ browser }) => {
+    const context = await browser.newContext({ serviceWorkers: 'allow' });
+    const page = await context.newPage();
+    await page.addInitScript(() => {
+        localStorage.setItem('typingGameSettings', JSON.stringify({ mode: 'words' }));
+    });
+    await page.goto('/');
+    await page.evaluate(async () => {
+        await navigator.serviceWorker.ready;
+        if (!navigator.serviceWorker.controller) {
+            await new Promise((resolve) =>
+                navigator.serviceWorker.addEventListener('controllerchange', resolve, {
+                    once: true,
+                })
+            );
+        }
+    });
+
+    await context.setOffline(true);
+    await page.reload();
+    await expect(page.locator('#quote-display span').first()).toBeAttached();
+    await input(page).pressSequentially(await currentQuote(page), { delay: 40 });
+    await expect(page.locator('#result-modal')).toHaveClass(/show/);
+    const fonts = await page.evaluate(
+        () => [...document.fonts].filter((face) => face.status === 'loaded').length
+    );
+    expect(fonts).toBe(2);
+    await context.close();
+});
+
+test('the manifest names the app and its icons', async ({ request }) => {
+    const response = await request.get('/manifest.webmanifest');
+    expect(response.ok()).toBe(true);
+    const manifest = await response.json();
+    expect(manifest).toMatchObject({ name: 'TypeSpeed', start_url: './', display: 'standalone' });
+    for (const icon of manifest.icons) {
+        expect((await request.get(`/${icon.src}`)).ok()).toBe(true);
+    }
+    expect(manifest.icons.map((icon) => icon.sizes)).toEqual(['192x192', '512x512']);
 });

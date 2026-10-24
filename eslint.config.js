@@ -34,6 +34,14 @@ module.exports = [
         rules: { 'no-unused-vars': 'off' },
     },
     {
+        files: ['sw.js'],
+        languageOptions: {
+            ecmaVersion: 2022,
+            sourceType: 'script',
+            globals: { ...globals.serviceworker },
+        },
+    },
+    {
         files: ['tests/**/*.js', 'playwright.config.js', 'eslint.config.js'],
         languageOptions: {
             ecmaVersion: 2022,

@@ -34,6 +34,7 @@ Open `index.html` in a browser, or serve the folder with any static file server.
 - **Challenge links**: after a run of a second or longer, Copy challenge link puts a URL on the clipboard. The URL's hash holds the run's settings, the seed of its passages, its WPM, and its keystroke timings, compressed. Opening it starts a run on the same passages with that run as the ghost, and the result dialog says who was faster. The receiver's saved settings are not changed; after the run, Play Again goes back to them. Links made before a change to the passages in `texts.js` may show different text.
 - **Stats**: a dialog, opened from the chart icon in the header, with your best WPM for every setting you have played, the average of your last ten runs, and a list of recorded runs. Export saves everything in `localStorage` to a JSON file, Import loads such a file and replaces the stored data, and Clear data (two clicks) removes history, bests, and key stats.
 - **Themes**: System (follows the OS light/dark and increased-contrast settings), Dark, Light, and High contrast, chosen in Settings. `theme.js`, loaded in `<head>`, applies the saved theme before the page paints.
+- **Offline and install**: `sw.js`, a service worker, saves the app's files on the first visit, so later visits load without a network connection. It tries the network first, so a new version is used as soon as you are online. `manifest.webmanifest` and the icons in `icons/` let browsers install the page as an app.
 - **Sound**: short tones made with the Web Audio API for keypress, mistake, and completion. Can be turned off.
 - **Keyboard**: Tab restarts while you are typing. Escape closes a dialog. Opening Settings during a run abandons the run.
 - **Focus**: if the typing input loses focus, a hint appears over the text. Pressing a letter key moves focus back to the input.
@@ -69,9 +70,9 @@ npm run format        # Prettier, write mode
 npm run check         # lint, format check, and tests
 ```
 
-`index.html`, `theme.js`, `texts.js`, `script.js`, and `style.css` are the whole app. The script runs at load and expects to be the last tag in `<body>`. Tests live in `tests/` and drive the real page with keystrokes in Chromium, Firefox, and WebKit. Each item under "What it does" has at least one test, as do recovery from corrupt `localStorage`, the contrast check, and the absence of requests to other sites.
+`index.html`, `theme.js`, `texts.js`, `script.js`, and `style.css` are the app; `sw.js`, `manifest.webmanifest`, and `icons/` add offline use and installing. The script runs at load and expects to be the last tag in `<body>`. Tests live in `tests/` and drive the real page with keystrokes in Chromium, Firefox, and WebKit. Each item under "What it does" has at least one test, as do recovery from corrupt `localStorage`, the contrast check, and the absence of requests to other sites.
 
-Each push to `main` runs lint, the format check, and the tests in GitHub Actions. If they pass, the same workflow publishes `index.html`, `theme.js`, `texts.js`, `script.js`, `style.css`, and `fonts/` to GitHub Pages; if they fail, the live site is not changed.
+Each push to `main` runs lint, the format check, and the tests in GitHub Actions. If they pass, the same workflow publishes those files and `fonts/` to GitHub Pages; if they fail, the live site is not changed.
 
 ## License
 

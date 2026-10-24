@@ -8,6 +8,9 @@ module.exports = defineConfig({
     use: {
         baseURL: 'http://127.0.0.1:8765',
         trace: 'retain-on-failure',
+        // The service worker would cache responses across tests. The offline
+        // test turns it back on for its own context.
+        serviceWorkers: 'block',
     },
     webServer: {
         command: 'node scripts/serve.mjs',

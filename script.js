@@ -1669,6 +1669,17 @@ function init() {
 
     resetGame();
     loadChallengeFromHash();
+    registerServiceWorker();
+}
+
+// --- Offline ---
+// sw.js saves the app's files so the page loads offline. Service workers
+// only run over HTTPS or on localhost, so file:// and other origins skip it.
+function registerServiceWorker() {
+    if (!('serviceWorker' in navigator) || !window.isSecureContext) return;
+    // Offline use is optional: if registration fails (blocked by the
+    // browser or its settings), the page works the same without it.
+    navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
 init();
