@@ -389,14 +389,26 @@ test.describe('best scores', () => {
     });
 });
 
-test('reduced motion turns off animations', async ({ page }) => {
-    await page.emulateMedia({ reducedMotion: 'reduce' });
+test('reduced motion turns off the caret blink', async ({ page }) => {
     await page.goto('/');
-    const styles = await page.evaluate(() => ({
-        glow: getComputedStyle(document.querySelector('.background-glow')).animationName,
-        caret: getComputedStyle(document.querySelector('.current'), '::before').animationName,
-    }));
-    expect(styles).toEqual({ glow: 'none', caret: 'none' });
+    const caret = () =>
+        page.evaluate(
+            () => getComputedStyle(document.querySelector('.current'), '::before').animationName
+        );
+    expect(await caret()).toBe('blink');
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    expect(await caret()).toBe('none');
+});
+
+// An animation under the container's backdrop-filter makes the browser
+// recompute the blur on every frame while the page is idle.
+test('nothing behind the blurred container animates', async ({ page }) => {
+    await page.goto('/');
+    const glow = await page.evaluate(() => {
+        const style = getComputedStyle(document.querySelector('.background-glow'));
+        return [style.animationName, style.transitionDuration];
+    });
+    expect(glow).toEqual(['none', '0s']);
 });
 
 test('paste and drop are blocked', async ({ page }) => {

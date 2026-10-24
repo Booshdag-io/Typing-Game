@@ -43,7 +43,7 @@ Serve the folder with `npm run serve` (see Development) or any static file serve
 - **Keyboard**: Tab restarts while you are typing. Escape closes a dialog. Opening Settings during a run abandons the run.
 - **Focus**: if the typing input loses focus, a hint appears over the text. Pressing a letter key moves focus back to the input.
 - **Screen readers**: the passage is available as the input's description, settings buttons report whether they are selected, and the result dialog reads out WPM and accuracy.
-- **Reduced motion**: with the OS reduce-motion setting on, the background pulse, caret blink, and fades are turned off.
+- **Reduced motion**: with the OS reduce-motion setting on, the caret blink and fades are turned off.
 
 Pasting into the input is blocked, and the caret stays at the end: arrow keys, Home, End, select-all, and clicks do not move it.
 

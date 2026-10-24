@@ -182,7 +182,9 @@ select:focus-visible,
     outline-offset: 2px;
 }
 
-/* Animated Background */
+/* Background. Static: an animation here sits under the container's
+   backdrop-filter, which then has to be recomputed on every frame, even
+   while nothing on the page changes. */
 .background-glow {
     position: fixed;
     top: 0;
@@ -193,18 +195,8 @@ select:focus-visible,
         radial-gradient(circle at 0% 0%, var(--bg-gradient-1), transparent 50%),
         radial-gradient(circle at 100% 100%, var(--bg-gradient-2), transparent 50%);
     z-index: -1;
-    animation: pulse-bg 10s ease-in-out infinite alternate;
-}
-
-@keyframes pulse-bg {
-    0% {
-        opacity: 0.5;
-        transform: scale(1);
-    }
-    100% {
-        opacity: 0.8;
-        transform: scale(1.1);
-    }
+    opacity: 0.65;
+    transform: scale(1.05);
 }
 
 /* Glass Container */
