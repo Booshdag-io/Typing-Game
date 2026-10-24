@@ -4,6 +4,8 @@
 
 // --- DOM Elements ---
 const quoteDisplayElement = document.getElementById('quote-display');
+const quoteTextElement = document.getElementById('quote-text');
+const typingContainer = document.querySelector('.typing-container');
 const typingInputElement = document.getElementById('typing-input');
 const timerElement = document.getElementById('timer');
 const wpmElement = document.getElementById('wpm');
@@ -276,6 +278,7 @@ function getQuoteText() {
 function renderNewQuote() {
     runtime.quoteText = getQuoteText();
     quoteDisplayElement.textContent = '';
+    quoteTextElement.textContent = runtime.quoteText;
 
     if (gameState.isGhostEnabled) {
         const ghostCursor = document.createElement('div');
@@ -590,7 +593,9 @@ function saveSettings() {
 
 function setActivePill(selector, value) {
     selector.querySelectorAll('.pill').forEach((pill) => {
-        pill.classList.toggle('active', pill.dataset.value === value);
+        const active = pill.dataset.value === value;
+        pill.classList.toggle('active', active);
+        pill.setAttribute('aria-pressed', String(active));
     });
 }
 
@@ -697,20 +702,44 @@ function trapFocus(e, modal) {
     }
 }
 
+// Show the "press any key" hint while nothing would receive typing. Runs
+// after focus has settled, so opening a dialog does not flash it.
+function updateFocusHint() {
+    const lost =
+        document.activeElement !== typingInputElement &&
+        !isModalOpen(settingsModal) &&
+        !isModalOpen(resultModal);
+    typingContainer.classList.toggle('unfocused', lost);
+}
+
+// A printable key pressed while focus is elsewhere goes to the input. Form
+// controls keep their own keys, and Space still presses a focused button.
+function refocusOnType(e) {
+    if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
+    const active = document.activeElement;
+    if (active === typingInputElement || typingInputElement.disabled) return;
+    if (active && ['INPUT', 'SELECT', 'TEXTAREA'].includes(active.tagName)) return;
+    if (e.key === ' ' && active && active.tagName === 'BUTTON') return;
+    typingInputElement.focus();
+}
+
 function handleKeydown(e) {
     if (e.key === 'Escape') {
         if (isModalOpen(settingsModal)) closeSettings();
         else if (isModalOpen(resultModal)) resetGame();
         return;
     }
-    if (e.key !== 'Tab') return;
-
-    if (isModalOpen(settingsModal)) {
+    if (e.key === 'Tab' && isModalOpen(settingsModal)) {
         trapFocus(e, settingsModal);
         return;
     }
-    if (isModalOpen(resultModal)) {
+    if (e.key === 'Tab' && isModalOpen(resultModal)) {
         trapFocus(e, resultModal);
+        return;
+    }
+
+    if (e.key !== 'Tab') {
+        if (!isModalOpen(settingsModal) && !isModalOpen(resultModal)) refocusOnType(e);
         return;
     }
 
@@ -731,6 +760,8 @@ function init() {
     typingInputElement.addEventListener('mousedown', handleInputMousedown);
     typingInputElement.addEventListener('select', pinCaretToEnd);
     typingInputElement.addEventListener('focus', pinCaretToEnd);
+    typingInputElement.addEventListener('focus', updateFocusHint);
+    typingInputElement.addEventListener('blur', () => setTimeout(updateFocusHint, 0));
     typingInputElement.addEventListener('paste', (e) => e.preventDefault());
     typingInputElement.addEventListener('drop', (e) => e.preventDefault());
     resetButton.addEventListener('click', resetGame);

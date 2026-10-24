@@ -3,6 +3,7 @@
 /* global runtime, gameState, resultModal, typingInputElement, wpmElement, updateMetrics */
 
 const { test, expect } = require('@playwright/test');
+const { default: AxeBuilder } = require('@axe-core/playwright');
 
 const input = (page) => page.locator('#typing-input');
 const currentQuote = (page) => page.evaluate(() => runtime.quoteText);
@@ -483,4 +484,99 @@ test('ghost cursor lines up with its character while focus mode scales the text'
         return Math.abs(cursor.getBoundingClientRect().left - span.getBoundingClientRect().left);
     });
     expect(offset).toBeLessThan(1);
+});
+
+test.describe('accessibility', () => {
+    const contrastViolations = async (page) => {
+        const results = await new AxeBuilder({ page }).withRules(['color-contrast']).analyze();
+        return results.violations.flatMap((v) => v.nodes.map((n) => n.target.join(' ')));
+    };
+
+    test('text meets WCAG AA contrast on the main screen and in both dialogs', async ({ page }) => {
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        await page.goto('/');
+        expect(await contrastViolations(page)).toEqual([]);
+
+        await page.locator('#settings-btn').click();
+        expect(await contrastViolations(page)).toEqual([]);
+        await page.keyboard.press('Tab');
+        await page.keyboard.press('Enter');
+        await page.keyboard.press('Escape');
+
+        await input(page).pressSequentially(await currentQuote(page));
+        await expect(page.locator('#result-modal')).toHaveClass(/show/);
+        expect(await contrastViolations(page)).toEqual([]);
+    });
+
+    test('screen readers get the passage, pill state, and result values', async ({ page }) => {
+        await page.goto('/');
+        await expect(input(page)).toHaveAttribute('aria-describedby', 'quote-text');
+        await expect(page.locator('#quote-text')).toHaveText(await currentQuote(page));
+
+        // Time mode replaces the passage mid-run; the hidden copy follows.
+        await input(page).pressSequentially(await currentQuote(page));
+        await expect(page.locator('#quote-text')).toHaveText(await currentQuote(page));
+        await page.keyboard.press('Tab');
+
+        await page.locator('#settings-btn').click();
+        await expect(page.locator('#mode-selector [data-value="time"]')).toHaveAttribute(
+            'aria-pressed',
+            'true'
+        );
+        await page.locator('#mode-selector [data-value="words"]').click();
+        await expect(page.locator('#mode-selector [data-value="time"]')).toHaveAttribute(
+            'aria-pressed',
+            'false'
+        );
+        await expect(page.locator('#mode-selector [data-value="words"]')).toHaveAttribute(
+            'aria-pressed',
+            'true'
+        );
+        await page.keyboard.press('Escape');
+
+        await expect(page.locator('#result-modal')).toHaveAttribute(
+            'aria-describedby',
+            'result-stats'
+        );
+    });
+});
+
+test.describe('focus hint', () => {
+    test('appears when the input loses focus and a letter key brings typing back', async ({
+        page,
+    }) => {
+        await page.goto('/');
+        await expect(page.locator('#focus-hint')).toBeHidden();
+
+        await page.locator('header h1').click();
+        await expect(page.locator('#focus-hint')).toBeVisible();
+
+        const quote = await currentQuote(page);
+        await page.keyboard.press(quote[0]);
+        await expect(input(page)).toBeFocused();
+        await expect(page.locator('#focus-hint')).toBeHidden();
+        await expect(input(page)).toHaveValue(quote[0]);
+    });
+
+    test('does not appear behind an open dialog', async ({ page }) => {
+        await page.goto('/');
+        await page.locator('#settings-btn').click();
+        await expect(page.locator('#settings-modal')).toHaveClass(/show/);
+        await expect(page.locator('#focus-hint')).toBeHidden();
+    });
+});
+
+test('hard mode blurs typed characters and leaves the rest readable', async ({ page }) => {
+    await page.addInitScript(() => {
+        localStorage.setItem('typingGameSettings', JSON.stringify({ isHardMode: true }));
+    });
+    await page.goto('/');
+    const quote = await currentQuote(page);
+    await input(page).pressSequentially(quote.slice(0, 3));
+
+    const spans = page.locator('#quote-display span');
+    await expect(spans.nth(0)).toHaveCSS('filter', 'blur(4px)');
+    await expect(spans.nth(2)).toHaveCSS('filter', 'blur(4px)');
+    await expect(spans.nth(3)).toHaveCSS('filter', 'none');
+    await expect(spans.nth(10)).toHaveCSS('filter', 'none');
 });

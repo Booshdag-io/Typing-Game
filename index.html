@@ -97,11 +97,15 @@
 
                 <div class="typing-container">
                     <div id="quote-display" class="quote-display" aria-hidden="true"></div>
+                    <p id="quote-text" class="visually-hidden"></p>
+                    <div id="focus-hint" class="focus-hint" aria-hidden="true">
+                        Click here or press any key to type
+                    </div>
                     <textarea
                         id="typing-input"
                         class="typing-input"
                         aria-label="Type the text shown above"
-                        placeholder="Type here..."
+                        aria-describedby="quote-text"
                         autocomplete="off"
                         autocorrect="off"
                         autocapitalize="off"
@@ -139,10 +143,11 @@
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="result-title"
+                aria-describedby="result-stats"
             >
                 <div class="modal-content">
                     <h2 id="result-title">Result</h2>
-                    <div class="modal-stats">
+                    <div class="modal-stats" id="result-stats">
                         <div class="modal-stat">
                             <span class="label">WPM</span>
                             <span id="modal-wpm" class="value">0</span>
@@ -192,8 +197,12 @@
                             role="group"
                             aria-labelledby="mode-label"
                         >
-                            <button class="pill active" data-value="time">Time</button>
-                            <button class="pill" data-value="words">Words</button>
+                            <button class="pill active" data-value="time" aria-pressed="true">
+                                Time
+                            </button>
+                            <button class="pill" data-value="words" aria-pressed="false">
+                                Words
+                            </button>
                         </div>
                     </div>
 
@@ -205,9 +214,11 @@
                             role="group"
                             aria-labelledby="duration-label"
                         >
-                            <button class="pill" data-value="15">15s</button>
-                            <button class="pill" data-value="30">30s</button>
-                            <button class="pill active" data-value="60">60s</button>
+                            <button class="pill" data-value="15" aria-pressed="false">15s</button>
+                            <button class="pill" data-value="30" aria-pressed="false">30s</button>
+                            <button class="pill active" data-value="60" aria-pressed="true">
+                                60s
+                            </button>
                         </div>
                     </div>
 
@@ -219,9 +230,11 @@
                             role="group"
                             aria-labelledby="word-count-label"
                         >
-                            <button class="pill active" data-value="10">10</button>
-                            <button class="pill" data-value="25">25</button>
-                            <button class="pill" data-value="50">50</button>
+                            <button class="pill active" data-value="10" aria-pressed="true">
+                                10
+                            </button>
+                            <button class="pill" data-value="25" aria-pressed="false">25</button>
+                            <button class="pill" data-value="50" aria-pressed="false">50</button>
                         </div>
                     </div>
 
@@ -236,7 +249,7 @@
                             <label class="toggle-label">
                                 <input type="checkbox" id="hard-mode-toggle-settings" />
                                 <span class="toggle-custom"></span>
-                                Hard Mode (blur the text)
+                                Hard Mode (blur what you have typed)
                             </label>
                             <label class="toggle-label">
                                 <input type="checkbox" id="ghost-mode-toggle" />

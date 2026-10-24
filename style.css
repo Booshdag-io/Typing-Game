@@ -15,11 +15,13 @@
 
     /* Text Colors */
     --text-main: #e2e8f0;
-    --text-muted: #64748b;
-    --text-ghost: #475569;
+    --text-muted: #94a3b8; /* 5.5:1 on the lightest part of the container */
+    --text-ghost: #8b9bb4; /* untyped text, 5:1 */
 
     /* Accents */
     --accent-primary: #818cf8; /* Indigo-400 */
+    --accent-strong: #4f46e5; /* Indigo-600, button fill with white text at 6.3:1 */
+    --accent-strong-hover: #4338ca; /* Indigo-700 */
     --accent-glow: rgba(129, 140, 248, 0.5);
     --accent-secondary: #2dd4bf; /* Teal-400 */
 
@@ -359,8 +361,10 @@ input:checked + .toggle-custom::after {
     transition: filter 0.3s ease;
 }
 
-.quote-display.blurred {
-    filter: blur(5px);
+/* Hard Mode: blur what has been typed, so mistakes cannot be seen. */
+.quote-display.blurred .correct,
+.quote-display.blurred .incorrect {
+    filter: blur(4px);
 }
 
 /* Text Effects */
@@ -418,6 +422,25 @@ input:checked + .toggle-custom::after {
     cursor: default;
     z-index: 10; /* Above display to capture clicks */
     resize: none;
+}
+
+/* Shown over the passage when the input does not have focus */
+.focus-hint {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    color: var(--text-main);
+    background: rgba(15, 23, 42, 0.75);
+    border-radius: var(--radius-md);
+    pointer-events: none; /* Clicks reach the input underneath */
+    z-index: 6;
+}
+
+.typing-container.unfocused .focus-hint {
+    display: flex;
 }
 
 /* Ghost Cursor */
@@ -621,12 +644,12 @@ footer {
 }
 
 .action-btn.primary {
-    background: var(--accent-primary);
+    background: var(--accent-strong);
     color: white;
 }
 
 .action-btn.primary:hover {
-    background: var(--accent-glow);
+    background: var(--accent-strong-hover);
     box-shadow: 0 0 15px var(--accent-glow);
 }
 
