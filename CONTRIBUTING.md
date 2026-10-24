@@ -33,3 +33,7 @@ README and comments say what the code does. No claims about quality or speed, an
 ## Commits
 
 Sentence-style imperative subjects, for example "Add settings modal" or "Fix hidden modals".
+
+## Security problems
+
+Do not open a public issue. See `SECURITY.md` for how to report one privately.
