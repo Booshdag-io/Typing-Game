@@ -1694,6 +1694,9 @@ function init() {
     challengeBtn.addEventListener('click', copyChallengeLink);
 
     document.addEventListener('keydown', handleKeydown);
+    // A link opened in a tab that already has the page only changes the
+    // hash. clearChallengeHash uses replaceState, which does not fire this.
+    window.addEventListener('hashchange', loadChallengeFromHash);
 
     resetGame();
     loadChallengeFromHash();

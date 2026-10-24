@@ -1395,6 +1395,29 @@ test.describe('challenge links', () => {
         await fresh.close();
     });
 
+    test('a link opened in a tab that already has the page starts the challenge', async ({
+        page,
+    }) => {
+        await page.goto('/');
+        await input(page).pressSequentially('ab');
+        const code = await page.evaluate(() =>
+            encodeChallenge({
+                v: 1,
+                s: { mode: 'words', wordCount: 10, category: 'common' },
+                seed: 99,
+                wpm: 42,
+                k: [],
+                d: [100, 1],
+            })
+        );
+        await page.goto(`/#c=${code}`);
+        await expect(page.locator('#ghost-status')).toHaveText(
+            'Challenge: beat 42 WPM on this text'
+        );
+        expect(await page.evaluate(() => [runtime.isStarted, runtime.seed])).toEqual([false, 99]);
+        await expect(page.locator('#quick-mode .pill.active')).toHaveText('Words');
+    });
+
     test('malformed and oversized links fall back to a normal run', async ({ page }) => {
         const errors = collectErrors(page);
         for (const hash of [
