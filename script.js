@@ -1124,7 +1124,7 @@ async function shareResult() {
 // A link carries a finished run's settings, seed, WPM, and keystroke
 // timings in the URL hash. Opening it plays those passages with the run as
 // the ghost, without changing the receiver's saved settings.
-const CHALLENGE_VERSION = 1;
+const CHALLENGE_VERSION = 2;
 const CHALLENGE_MAX_LENGTH = 20000; // characters in the hash
 const CHALLENGE_MAX_STROKES = 5000;
 const CHALLENGE_SETTINGS = [
@@ -1241,6 +1241,7 @@ function challengePayload() {
         v: CHALLENGE_VERSION,
         s: settings,
         seed: runtime.seed,
+        th: textHash(firstPassageText ? firstPassageText() : (runtime.passages[0] || "")),
         wpm: Number(modalWpmElement.textContent),
         k: gameState.category === 'weak' ? runtime.weakKeys : [],
         d: deltas,
